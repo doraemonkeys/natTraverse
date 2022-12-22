@@ -381,7 +381,7 @@ func (t *TraversalTool) activeBothNoSymmetric_TCP(laddr string, raddr string, rN
 // 被动端，对方是对称NAT，打洞完成后，等待对方的连接
 func (t *TraversalTool) PortRestrictToSymmetric_UDP(laddr string, raddr string, rNAT NATTypeINfo) (TraversalInfo, error) {
 	if t.Predictor == nil {
-		return TraversalInfo{}, fmt.Errorf("symmetric NAT can not be predicted")
+		return TraversalInfo{}, fmt.Errorf("symmetric NAT with random ports is unpredictable")
 	}
 	rPort := strings.Split(raddr, ":")[1]
 	rIP := strings.Split(raddr, ":")[0]
@@ -431,7 +431,7 @@ func (t *TraversalTool) PortRestrictToSymmetric_UDP(laddr string, raddr string, 
 // 被动端，对方是对称NAT，打洞完成后，等待对方的连接
 func (t *TraversalTool) PortRestrictToSymmetric_TCP(laddr string, raddr string, rNAT NATTypeINfo) (TraversalInfo, error) {
 	if t.Predictor == nil {
-		return TraversalInfo{}, fmt.Errorf("symmetric NAT can not be predicted")
+		return TraversalInfo{}, fmt.Errorf("symmetric NAT with random ports is unpredictable")
 	}
 	rPort := strings.Split(raddr, ":")[1]
 	rIP := strings.Split(raddr, ":")[0]
@@ -516,7 +516,7 @@ func (t *TraversalTool) SymmetricToPortRestrict_UDP(laddr string, raddr string, 
 
 func (t *TraversalTool) activeBothSymmetric_UDP(laddr string, raddr string, InSameNat bool, rNAT NATTypeINfo) (TraversalInfo, error) {
 	if t.Predictor == nil {
-		return TraversalInfo{}, fmt.Errorf("symmetric NAT can not be predicted")
+		return TraversalInfo{}, fmt.Errorf("symmetric NAT with random ports is unpredictable")
 	}
 	fmt.Println("activeBothSymmetric_UDP")
 	rPort := strings.Split(raddr, ":")[1]
@@ -605,7 +605,7 @@ func SymmetricDail(raddr string, lport int, infoChan chan TraversalInfo) {
 
 func (t *TraversalTool) passiveBothSymmetric_UDP(laddr string, raddr string, InSameNat bool, rNAT NATTypeINfo) (TraversalInfo, error) {
 	if t.Predictor == nil {
-		return TraversalInfo{}, fmt.Errorf("symmetric NAT can not be predicted")
+		return TraversalInfo{}, fmt.Errorf("symmetric NAT with random ports is unpredictable")
 	}
 	rPort := strings.Split(raddr, ":")[1]
 	rIP := strings.Split(raddr, ":")[0]
@@ -702,7 +702,7 @@ func (t *TraversalTool) beginTestNatType(udpConn *net.UDPConn) (NATTypeINfo, err
 
 func (t *TraversalTool) activeBothSymmetric_TCP(laddr string, raddr string, InSameNat bool, rNAT NATTypeINfo) (TraversalInfo, error) {
 	if t.Predictor == nil {
-		return TraversalInfo{}, fmt.Errorf("symmetric NAT can not be predicted")
+		return TraversalInfo{}, fmt.Errorf("symmetric NAT with random ports is unpredictable")
 	}
 	rPort := strings.Split(raddr, ":")[1]
 	rIP := strings.Split(raddr, ":")[0]
@@ -782,7 +782,7 @@ func SymmetricDail_TCP(raddr string, lport int, infoChan chan TraversalInfo) {
 
 func (t *TraversalTool) passiveBothSymmetric_TCP(laddr string, raddr string, InSameNat bool, rNAT NATTypeINfo) (TraversalInfo, error) {
 	if t.Predictor == nil {
-		return TraversalInfo{}, fmt.Errorf("symmetric NAT can not be predicted")
+		return TraversalInfo{}, fmt.Errorf("symmetric NAT with random ports is unpredictable")
 	}
 	rPort := strings.Split(raddr, ":")[1]
 	rIP := strings.Split(raddr, ":")[0]
