@@ -66,9 +66,6 @@ func (t *TraversalTool) BeginTraversal() (TraversalInfo, error) {
 	fmt.Println("nat type", t.NATInfo.NATType.String())
 	fmt.Println("port change rule", t.NATInfo.PortChangeRule)
 	fmt.Println("PortInfluencedByProtocol", t.NATInfo.PortInfluencedByProtocol)
-	if t.Predictor == nil && t.NATInfo.PortChangeRule == Linear {
-		t.Predictor = &LinearPortPredictor{}
-	}
 	rand.Seed(int64(time.Now().Nanosecond()))
 	if t.LocalAddr == "" {
 		t.LocalAddr = ":" + fmt.Sprint(rand.Intn(20000)+10000)
@@ -120,6 +117,9 @@ func (t *TraversalTool) traversal() (TraversalInfo, error) {
 	err = punchingInfo.unmarshal(msg.Data)
 	if err != nil {
 		return TraversalInfo{}, fmt.Errorf("unmarshal punching info error %w", err)
+	}
+	if t.Predictor == nil && punchingInfo.RNAT.PortChangeRule == Linear {
+		t.Predictor = &LinearPortPredictor{}
 	}
 	switch t.WantNetwork {
 	case "udp4":
