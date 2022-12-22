@@ -58,6 +58,10 @@ func NewReliableUDP(conn *net.UDPConn) *ReliableUDP {
 	return rUDP
 }
 
+func (r *ReliableUDP) LocalAddr() net.Addr {
+	return r.conn.LocalAddr()
+}
+
 // 接收数据,返回ack
 func (r *ReliableUDP) recv() {
 	var data [1024]byte

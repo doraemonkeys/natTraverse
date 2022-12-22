@@ -408,11 +408,13 @@ func handleTCPHolePunching(tcpConn1, tcpConn2 *net.TCPConn, natInfo1, natInfo2 N
 	} else {
 		holeMsg1.MyType = passive
 	}
-	// err = TCPSendMessage(tcpConn1, msg1)
-	// if err != nil {
-	// 	log.Println("send port negotiation message error", err)
-	// 	return err
-	// }
+	data1, err := json.Marshal(holeMsg1)
+	if err != nil {
+		log.Println("marshal hole punching negotiation message error", err)
+		return err
+	}
+	msg1.Data = data1
+
 	msg2 := Message{
 		Type: PunchingNegotiation,
 	}
@@ -427,6 +429,12 @@ func handleTCPHolePunching(tcpConn1, tcpConn2 *net.TCPConn, natInfo1, natInfo2 N
 	} else {
 		holeMsg2.MyType = active
 	}
+	data2, err := json.Marshal(holeMsg2)
+	if err != nil {
+		log.Println("marshal hole punching negotiation message error", err)
+		return err
+	}
+	msg2.Data = data2
 	//发送打洞协商消息,被动方先发
 	//先给打洞方(被动方)发端口信息，防止洞还没打好连接请求就到了
 	if conn1Isactive {
@@ -522,18 +530,23 @@ func (t *TraversalServer) TestNATServer(TCPMsgCh chan Message) {
 	if err != nil {
 		panic(err)
 	}
-	for {
-		var msg Message
-		receiveCh := make(chan Message, 1)
-		go func() {
-			msg, raddr, err := UDPReceiveMessage(udpConn, 0)
+	rudpConn := NewReliableUDP(udpConn)
+	defer rudpConn.Close()
+	rudpConn.SetGlobalReceive()
+	var msg Message
+	receiveCh := make(chan Message, 1)
+	go func() {
+		for {
+			msg, raddr, err := RUDPReceiveAllMessage(rudpConn, 0)
 			if err != nil {
-				log.Println("receive message error", err)
-				return
+				log.Println("test nat server receive message error", err)
+				continue
 			}
 			msg.SrcPublicAddr = raddr.String()
 			receiveCh <- msg
-		}()
+		}
+	}()
+	for {
 		select {
 		case msg = <-receiveCh:
 		case msg = <-TCPMsgCh:
@@ -550,7 +563,7 @@ func (t *TraversalServer) TestNATServer(TCPMsgCh chan Message) {
 			t.targetMapLock.Lock()
 			t.targetMap[msg.IdentityToken] = ch
 			t.targetMapLock.Unlock()
-			go t.handleTestNatType(udpConn, msg.SrcPublicAddr, msg.IdentityToken, ch)
+			go t.handleTestNatType(rudpConn, msg.SrcPublicAddr, msg.IdentityToken, ch)
 		default:
 			ch := t.targetMap[msg.IdentityToken]
 			if ch != nil {
@@ -562,7 +575,7 @@ func (t *TraversalServer) TestNATServer(TCPMsgCh chan Message) {
 	}
 }
 
-func (t *TraversalServer) handleTestNatType(udpConn *net.UDPConn, raddr string, identityToken string, UDPMsgCh chan Message) {
+func (t *TraversalServer) handleTestNatType(rudpConn *ReliableUDP, raddr string, identityToken string, UDPMsgCh chan Message) {
 	defer func() {
 		t.targetMapLock.Lock()
 		delete(t.targetMap, identityToken)
@@ -570,29 +583,33 @@ func (t *TraversalServer) handleTestNatType(udpConn *net.UDPConn, raddr string, 
 	}()
 	var msg Message
 	msg.Type = ACK
-	err := UDPSendMessage(udpConn, raddr, msg)
+	err := RUDPSendMessage(rudpConn, raddr, msg)
 	if err != nil {
 		log.Println("send message error", err)
 		return
 	}
 	fmt.Println("send ack to", raddr)
-	tempUdpConn, err := UDPRandListen()
+	//随机监听一个端口，等待对方连接，看看公网端口是否变化
+	tempUDPConn, err := UDPRandListen()
 	if err != nil {
 		log.Println("listen udp error", err)
 		return
 	}
-	defer tempUdpConn.Close()
-	randPort := tempUdpConn.LocalAddr().String()[strings.LastIndex(tempUdpConn.LocalAddr().String(), ":")+1:]
+	tempRUdpConn := NewReliableUDP(tempUDPConn)
+	defer tempRUdpConn.Close()
+	//defer tempUdpConn.Close()
+	randPort := tempRUdpConn.LocalAddr().String()[strings.LastIndex(tempRUdpConn.LocalAddr().String(), ":")+1:]
 	fmt.Println("rand port:", randPort)
 	msg.Type = PortNegotiation
 	msg.Data = []byte(fmt.Sprint(randPort))
-	err = UDPSendMessage(udpConn, raddr, msg)
+	err = RUDPSendMessage(rudpConn, raddr, msg)
 	if err != nil {
 		log.Println("send message error", err)
 		return
 	}
 	fmt.Println("send port negotiation to", raddr)
-	msg, newRAddr, err := UDPReceiveMessage(tempUdpConn, 2*time.Second)
+	tempRUdpConn.SetGlobalReceive()
+	msg, newRAddr, err := RUDPReceiveAllMessage(tempRUdpConn, 2*time.Second)
 	if err != nil {
 		log.Println("receive message error", err)
 		return
@@ -623,16 +640,18 @@ func (t *TraversalServer) handleTestNatType(udpConn *net.UDPConn, raddr string, 
 		}
 	} else {
 		//非对称NAT
-		tempUdpConn, err = UDPRandListen()
+		tempUDPConn, err := UDPRandListen()
 		if err != nil {
 			log.Println("listen udp error", err)
 			return
 		}
-		defer tempUdpConn.Close()
+		tempRUdpConn := NewReliableUDP(tempUDPConn)
+		defer tempRUdpConn.Close()
 		msg2 := Message{
 			Type: ServerPortChangeTest,
 		}
-		err = UDPSendMessage(udpConn, raddr, msg2)
+		RUDPSendUnreliableMessage(tempRUdpConn, raddr, msg2)
+		err = RUDPSendUnreliableMessage(tempRUdpConn, raddr, msg2)
 		if err != nil {
 			log.Println("send message error", err)
 			return
@@ -655,7 +674,7 @@ func (t *TraversalServer) handleTestNatType(udpConn *net.UDPConn, raddr string, 
 				log.Println("receive message timeout")
 				FinallType = PortRestrictedCone
 				if tempMsg.SrcPublicAddr != "" {
-					UDPMsgCh <- tempMsg
+					UDPMsgCh <- tempMsg //读到了协议改变的消息，把消息放回去，下面处理(tcp传过来的)
 				}
 				ok = false
 			}
@@ -698,7 +717,7 @@ func (t *TraversalServer) handleTestNatType(udpConn *net.UDPConn, raddr string, 
 		IdentityToken: msg.IdentityToken,
 		Data:          data,
 	}
-	err = UDPSendMessage(udpConn, raddr, finnalMsg)
+	err = RUDPSendMessage(rudpConn, raddr, finnalMsg)
 	if err != nil {
 		log.Println("send message error", err)
 		return

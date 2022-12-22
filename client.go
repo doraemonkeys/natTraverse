@@ -36,6 +36,8 @@ func (t *TraversalTool) GetMyNatType() (NATTypeINfo, error) {
 	if err != nil {
 		return NATTypeINfo{}, fmt.Errorf("listen udp error %w", err)
 	}
+	rudpConn := NewReliableUDP(udpConn)
+	defer rudpConn.Close()
 	if LocalNatType.NATType != UnKnown {
 		t.NATInfo = LocalNatType
 		return LocalNatType, nil
@@ -46,12 +48,11 @@ func (t *TraversalTool) GetMyNatType() (NATTypeINfo, error) {
 		IdentityToken: t.identityToken,
 	}
 	//发送两次(第一个UDP包可能会被路由器丢弃)
-	UDPSendMessage(udpConn, t.ServerAddr, msg)
-	err = UDPSendMessage(udpConn, t.ServerAddr, msg)
+	err = RUDPSendMessage(rudpConn, t.ServerAddr, msg)
 	if err != nil {
-		return NATTypeINfo{}, fmt.Errorf("send message error %w", err)
+		return NATTypeINfo{}, fmt.Errorf("connect to server error %w", err)
 	}
-	return t.beginTestNatType(udpConn)
+	return t.beginTestNatType(rudpConn)
 }
 
 func (t *TraversalTool) BeginTraversal() (TraversalInfo, error) {
@@ -666,19 +667,20 @@ func (t *TraversalTool) passiveBothSymmetric_UDP(laddr string, raddr string, InS
 	}
 }
 
-func (t *TraversalTool) beginTestNatType(udpConn *net.UDPConn) (NATTypeINfo, error) {
+func (t *TraversalTool) beginTestNatType(rudpConn *ReliableUDP) (NATTypeINfo, error) {
+	rudpConn.SetGlobalReceive()
 	for {
-		msg, _, err := UDPReceiveMessage(udpConn, time.Second*2)
+		msg, _, err := RUDPReceiveAllMessage(rudpConn, time.Second*2)
 		if err != nil {
 			return NATTypeINfo{}, fmt.Errorf("receive message error %w", err)
 		}
 		switch msg.Type {
 		case PortNegotiation: //端口协商，向改变的端口发送消息，若服务器收到的地址端口改变，则说明是Symmetric NAT
-			err := t.handlePortNegotiation(udpConn, msg)
+			err := t.handlePortNegotiation(rudpConn, msg)
 			if err != nil {
 				return NATTypeINfo{}, err
 			}
-			err = t.ProtocolChangeTest(udpConn)
+			err = t.ProtocolChangeTest(rudpConn)
 			if err != nil {
 				return NATTypeINfo{}, err
 			}
@@ -690,7 +692,7 @@ func (t *TraversalTool) beginTestNatType(udpConn *net.UDPConn) (NATTypeINfo, err
 		case ErrorResponse: //服务器返回错误信息
 			return NATTypeINfo{}, fmt.Errorf("error response %s", msg.ErrorInfo)
 		case ServerPortChangeTest: //服务器端口改变测试
-			err := t.handleServerPortChangeTest(udpConn)
+			err := t.handleServerPortChangeTest(rudpConn)
 			if err != nil {
 				return NATTypeINfo{}, err
 			}
@@ -826,8 +828,8 @@ func (t *TraversalTool) passiveBothSymmetric_TCP(laddr string, raddr string, InS
 	return endInfo, nil
 }
 
-func (t *TraversalTool) ProtocolChangeTest(udpConn *net.UDPConn) error {
-	laddr, err := net.ResolveTCPAddr("tcp4", udpConn.LocalAddr().String())
+func (t *TraversalTool) ProtocolChangeTest(rudpConn *ReliableUDP) error {
+	laddr, err := net.ResolveTCPAddr("tcp4", rudpConn.LocalAddr().String())
 	if err != nil {
 		log.Println("resolve tcp addr error", err)
 		return err
@@ -856,19 +858,19 @@ func (t *TraversalTool) ProtocolChangeTest(udpConn *net.UDPConn) error {
 	return nil
 }
 
-func (t *TraversalTool) handleServerPortChangeTest(udpConn *net.UDPConn) error {
+func (t *TraversalTool) handleServerPortChangeTest(rudpConn *ReliableUDP) error {
 	msg := Message{
 		Type:          ServerPortChangeTestResponse,
 		IdentityToken: t.identityToken,
 	}
-	err := UDPSendMessage(udpConn, t.ServerAddr, msg)
+	err := RUDPSendMessage(rudpConn, t.ServerAddr, msg)
 	if err != nil {
-		return fmt.Errorf("send message error %w", err)
+		return fmt.Errorf("serverPortChangeTestResponse error %w", err)
 	}
 	return nil
 }
 
-func (t *TraversalTool) handlePortNegotiation(udpConn *net.UDPConn, msg Message) error {
+func (t *TraversalTool) handlePortNegotiation(rudpConn *ReliableUDP, msg Message) error {
 	var port = string(msg.Data)
 	tempAddr := t.ServerAddr[:strings.LastIndex(t.ServerAddr, ":")+1] + port
 	fmt.Println("temp addr", tempAddr)
@@ -876,10 +878,10 @@ func (t *TraversalTool) handlePortNegotiation(udpConn *net.UDPConn, msg Message)
 		Type:          PortNegotiationResponse,
 		IdentityToken: t.identityToken,
 	}
-	err := UDPSendMessage(udpConn, tempAddr, msg)
+	err := RUDPSendMessage(rudpConn, tempAddr, msg)
 	if err != nil {
-		log.Println("send message error", err)
-		return err
+		log.Println("port negotiation response error", err)
+		return fmt.Errorf("send message error %w", err)
 	}
 	fmt.Println("send port negotiation response")
 	return nil
