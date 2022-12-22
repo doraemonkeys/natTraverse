@@ -110,7 +110,7 @@ func (t *TraversalTool) traversal() (TraversalInfo, error) {
 		return TraversalInfo{}, fmt.Errorf("receive message error %w", err)
 	}
 	if msg.Type == ErrorResponse {
-		return TraversalInfo{}, fmt.Errorf("receive error response %s", msg.Data)
+		return TraversalInfo{}, fmt.Errorf("receive error response %s", msg.ErrorInfo)
 	}
 	if msg.Type != PunchingNegotiation {
 		return TraversalInfo{}, fmt.Errorf("receive wrong message type %d", msg.Type)
