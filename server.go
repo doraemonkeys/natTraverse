@@ -117,11 +117,11 @@ func (t *TraversalServer) handleConnection(tcpConn *net.TCPConn, msg Message) er
 		}
 		return fmt.Errorf(info)
 	}
-	fmt.Println(msg.IdentityToken)
+	fmt.Println("IdentityToken", msg.IdentityToken)
 	var natInfo NATTypeINfo
 	err := json.Unmarshal(msg.Data, &natInfo)
 	if err != nil {
-		info := "identity token error,not found holepunching type"
+		info := "unmarshal nat info error"
 		log.Println(info)
 		err := TCPSendMessage(tcpConn, Message{Type: ErrorResponse, ErrorInfo: info})
 		if err != nil {
@@ -129,22 +129,40 @@ func (t *TraversalServer) handleConnection(tcpConn *net.TCPConn, msg Message) er
 		}
 		return fmt.Errorf(info)
 	}
+
 	ch, ok := t.tonkenMap[msg.IdentityToken]
 	if ok {
+		fmt.Println("start send holePunchingConnection to channe")
+		if len(ch) > 0 {
+			fmt.Println("channel is full")
+		}
+		if ch == nil {
+			fmt.Println("channel is nil")
+		}
 		ch <- holePunchingConnection{TCPConn: tcpConn, NAT: natInfo}
+		fmt.Println("send holePunchingConnection to channe ok")
 		return nil
 	}
-	defer func() {
-		t.tonkenMapLock.Lock()
-		delete(t.tonkenMap, msg.IdentityToken)
-		t.tonkenMapLock.Unlock()
-	}()
 	var tcpConn2 *net.TCPConn
 	t.tonkenMapLock.Lock()
+	ch, ok = t.tonkenMap[msg.IdentityToken]
+	if ok {
+		ch <- holePunchingConnection{TCPConn: tcpConn, NAT: natInfo}
+		t.tonkenMapLock.Unlock()
+		return nil
+	}
 	t.tonkenMap[msg.IdentityToken] = make(chan holePunchingConnection, 1)
 	t.tonkenMapLock.Unlock()
 	ch = t.tonkenMap[msg.IdentityToken]
+	defer func(token string) {
+		t.tonkenMapLock.Lock()
+		delete(t.tonkenMap, token)
+		t.tonkenMapLock.Unlock()
+	}(msg.IdentityToken)
+	holeType := msg.IdentityToken[len(msg.IdentityToken)-3:]
+
 	var hole holePunchingConnection
+	fmt.Println("wait holepunching object:", tcpConn.RemoteAddr().String())
 	select {
 	case hole = <-ch:
 		tcpConn2 = hole.TCPConn
@@ -158,7 +176,31 @@ func (t *TraversalServer) handleConnection(tcpConn *net.TCPConn, msg Message) er
 		}
 		return fmt.Errorf(info)
 	}
-	holeType := msg.IdentityToken[len(msg.IdentityToken)-3:]
+	//检查tcpConn是否已经关闭
+	msg = Message{Type: ACK}
+	err = TCPSendMessage(tcpConn, msg)
+	if err != nil {
+		log.Println("send ack error", err)
+		info := "remote connection closed"
+		err := TCPSendMessage(tcpConn2, Message{Type: ErrorResponse, ErrorInfo: info})
+		if err != nil {
+			log.Println("send error response error", err)
+		}
+		return err
+	}
+	//检查tcpConn2是否已经关闭
+	msg = Message{Type: ACK}
+	err = TCPSendMessage(tcpConn2, msg)
+	if err != nil {
+		log.Println("send ack error", err)
+		info := "remote connection closed"
+		err := TCPSendMessage(tcpConn, Message{Type: ErrorResponse, ErrorInfo: info})
+		if err != nil {
+			log.Println("send error response error", err)
+		}
+		return err
+	}
+
 	if holeType == "UDP" {
 		err := handleUDPHolePunching(tcpConn, tcpConn2, natInfo, hole.NAT)
 		if err != nil {
@@ -602,6 +644,7 @@ func (t *TraversalServer) handleTestNatType(rudpConn *ReliableUDP, raddr string,
 	fmt.Println("rand port:", randPort)
 	msg.Type = PortNegotiation
 	msg.Data = []byte(fmt.Sprint(randPort))
+	//fmt.Println("send port negotiation,data:", string(msg.Data))
 	err = RUDPSendMessage(rudpConn, raddr, msg)
 	if err != nil {
 		log.Println("send message error", err)

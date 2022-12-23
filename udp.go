@@ -40,16 +40,18 @@ type ReliableUDP struct {
 	mapLock      *sync.RWMutex          //两个Map的锁，保证读写安全
 	dataMap      map[string]chan []byte //string必须为ip:port,用于不同地址的数据包缓冲
 	close        bool                   //关闭标志
+	chanLock     *sync.RWMutex          //通道锁，保证receiveAllCh通道的安全
 	receiveAllCh chan udpMsg            //接收所有数据包的通道
 }
 
 // 应该确保conn是可用的,且之后不能再使用conn
 func NewReliableUDP(conn *net.UDPConn) *ReliableUDP {
 	var rUDP = &ReliableUDP{
-		conn:    conn,
-		addrMap: make(map[string]*addrInfo),
-		mapLock: &sync.RWMutex{},
-		dataMap: make(map[string]chan []byte),
+		conn:     conn,
+		addrMap:  make(map[string]*addrInfo),
+		mapLock:  &sync.RWMutex{},
+		dataMap:  make(map[string]chan []byte),
+		chanLock: &sync.RWMutex{},
 	}
 	go rUDP.recv()
 	//清除超时的addrInfo,超时时间为50s
@@ -169,7 +171,11 @@ func (r *ReliableUDP) recv() {
 		if recvSeq == 1 && ack == 0 {
 			//对方发送的不可靠的数据包(不携带序号)
 			if r.receiveAllCh != nil {
-				r.receiveAllCh <- udpMsg{addr: addr, data: data[8:n]}
+				r.chanLock.RLock()
+				if r.receiveAllCh != nil {
+					r.receiveAllCh <- udpMsg{addr: addr, data: data[8:n]}
+				}
+				r.chanLock.RUnlock()
 			} else {
 				r.mapLock.RLock()
 				r.dataMap[addr.String()] <- data[8:n]
@@ -192,7 +198,11 @@ func (r *ReliableUDP) recv() {
 		newAddrInfo.ack = recvSeq + 1
 		//fmt.Println("接收到新包", recvSeq, "ack", ack, "myAck", newAddrInfo.myAck, "addr", addr.String())
 		if r.receiveAllCh != nil {
-			r.receiveAllCh <- udpMsg{addr: addr, data: data[8:n]}
+			r.chanLock.RLock()
+			if r.receiveAllCh != nil {
+				r.receiveAllCh <- udpMsg{addr: addr, data: data[8:n]}
+			}
+			r.chanLock.RUnlock()
 		} else {
 			r.mapLock.RLock()
 			r.dataMap[addr.String()] <- data[8:n]
@@ -414,7 +424,9 @@ func (r *ReliableUDP) Receive(addr *net.UDPAddr, timeout time.Duration) ([]byte,
 // 取消全局接收
 func (r *ReliableUDP) CancelGlobalReceive() {
 	tempCh := r.receiveAllCh
+	r.chanLock.Lock()
 	r.receiveAllCh = nil
+	r.chanLock.Unlock()
 	//清空通道，可能会导致乱序
 	for v := range tempCh {
 		r.mapLock.RLock()
@@ -444,11 +456,13 @@ func (r *ReliableUDP) ReceiveAll(timeout time.Duration) ([]byte, *net.UDPAddr, e
 
 // 设置全局接收，如果设置了全局接收，那么Receive函数将不再接收数据包，而是将数据包发送到全局接收通道
 func (r *ReliableUDP) SetGlobalReceive() {
+	ch := make(chan udpMsg, 100)
+	r.chanLock.Lock()
 	if r.receiveAllCh != nil {
 		return
 	}
-	ch := make(chan udpMsg, 100)
 	r.receiveAllCh = ch
+	r.chanLock.Unlock()
 	//清空dataMap，将数据包发送到全局接收通道ch，可能会导致乱序
 	r.mapLock.RLock()
 	for k, v := range r.dataMap {

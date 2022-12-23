@@ -103,6 +103,19 @@ func (t *TraversalTool) traversal() (TraversalInfo, error) {
 	if err != nil {
 		return TraversalInfo{}, fmt.Errorf("send message error %w", err)
 	}
+	//接收ACK，用于服务器判断我方是否仍然在线
+	msg, err = TCPReceiveMessage(tcpConn.(*net.TCPConn))
+	if err != nil {
+		return TraversalInfo{}, fmt.Errorf("receive message error %w", err)
+	}
+	if msg.Type == ErrorResponse {
+		return TraversalInfo{}, fmt.Errorf("receive error response %s", msg.ErrorInfo)
+	}
+	if msg.Type != ACK {
+		return TraversalInfo{}, fmt.Errorf("receive wrong message type %d", msg.Type)
+	}
+	fmt.Println("receive ack")
+	//接收穿透信息holePunchingNegotiationMsg
 	msg, err = TCPReceiveMessage(tcpConn.(*net.TCPConn))
 	if err != nil {
 		return TraversalInfo{}, fmt.Errorf("receive message error %w", err)
@@ -524,8 +537,7 @@ func (t *TraversalTool) activeBothSymmetric_UDP(laddr string, raddr string, InSa
 	rIP := strings.Split(raddr, ":")[0]
 	fmt.Println("rPort", rPort)
 	t.Predictor.SetInitialPort(rPort)
-	t.Predictor.NextPort()
-	t.Predictor.NextPort()
+
 	for i := 0; i < 9; i++ {
 		t.Predictor.NextPort()
 	}
@@ -582,13 +594,14 @@ func SymmetricDail(raddr string, lport int, infoChan chan TraversalInfo) {
 		return
 	}
 	UDPSendMessage(udpConn, raddr, Message{Type: ConnectionAck})
+	UDPSendMessage(udpConn, raddr, Message{Type: ConnectionAck})
 	err = UDPSendMessage(udpConn, raddr, Message{Type: ConnectionAck})
 	if err != nil {
 		fmt.Println("send message error", err)
 		return
 	}
 	for {
-		msg, addr, err := UDPReceiveMessage(udpConn, time.Second*3)
+		msg, addr, err := UDPReceiveMessage(udpConn, time.Second*5)
 		if err != nil {
 			fmt.Println("receive message error", err)
 			return
@@ -601,6 +614,7 @@ func SymmetricDail(raddr string, lport int, infoChan chan TraversalInfo) {
 			infoChan <- endInfo
 			return
 		}
+		fmt.Println("success receive message", msg, "from", addr)
 	}
 }
 
@@ -612,8 +626,6 @@ func (t *TraversalTool) passiveBothSymmetric_UDP(laddr string, raddr string, InS
 	rIP := strings.Split(raddr, ":")[0]
 	fmt.Println("rPort", rPort)
 	t.Predictor.SetInitialPort(rPort)
-	t.Predictor.NextPort()
-	t.Predictor.NextPort()
 	lAddr, err := net.ResolveUDPAddr("udp4", laddr)
 	if err != nil {
 		return TraversalInfo{}, err
@@ -643,7 +655,7 @@ func (t *TraversalTool) passiveBothSymmetric_UDP(laddr string, raddr string, InS
 		}
 	}()
 	for {
-		msg, addr, err := UDPReceiveMessage(udpConn, time.Second*3)
+		msg, addr, err := UDPReceiveMessage(udpConn, time.Second*5)
 		if err != nil {
 			fmt.Println("receive message error", err)
 			return TraversalInfo{}, err
@@ -710,8 +722,6 @@ func (t *TraversalTool) activeBothSymmetric_TCP(laddr string, raddr string, InSa
 	rIP := strings.Split(raddr, ":")[0]
 	fmt.Println("rPort", rPort)
 	t.Predictor.SetInitialPort(rPort)
-	t.Predictor.NextPort()
-	t.Predictor.NextPort()
 	for i := 0; i < 9; i++ {
 		t.Predictor.NextPort()
 	}
@@ -790,8 +800,7 @@ func (t *TraversalTool) passiveBothSymmetric_TCP(laddr string, raddr string, InS
 	rIP := strings.Split(raddr, ":")[0]
 	fmt.Println("rPort", rPort)
 	t.Predictor.SetInitialPort(rPort)
-	t.Predictor.NextPort()
-	t.Predictor.NextPort()
+
 	if InSameNat {
 		//UDP打洞处于同一nat，被动等待的打洞方将预测对方的端口+22
 		//主动连接的一方先暂停1s，确保前20个端口分配给了对方，然后其余保存不变
