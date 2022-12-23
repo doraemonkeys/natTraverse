@@ -459,6 +459,7 @@ func (r *ReliableUDP) SetGlobalReceive() {
 	ch := make(chan udpMsg, 100)
 	r.chanLock.Lock()
 	if r.receiveAllCh != nil {
+		r.chanLock.Unlock()
 		return
 	}
 	r.receiveAllCh = ch
