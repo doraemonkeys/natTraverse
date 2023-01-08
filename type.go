@@ -89,6 +89,7 @@ type TraversalInfo struct {
 
 type TraversalTool struct {
 	// WantNetwork is "udp4" or "tcp4",which is the type of network you want to penetrate.
+	// TCP成功率低，因为NAT设备可能会直接丢弃外来的TCP连接请求报文。
 	WantNetwork string
 	//服务器地址，用于连接服务器。
 	ServerAddr string

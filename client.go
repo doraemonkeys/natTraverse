@@ -490,7 +490,7 @@ func (t *TraversalTool) PortRestrictToSymmetric_TCP(laddr string, raddr string, 
 
 	conn, err := tcpListener.AcceptTCP()
 	if err != nil {
-		fmt.Println("accept tcp error", err)
+		fmt.Println("final attempt to establish a TCP connection failed", err)
 		return TraversalInfo{}, err
 	}
 	fmt.Println("accept tcp", conn.RemoteAddr().String())
@@ -505,7 +505,7 @@ func (t *TraversalTool) PortRestrictToSymmetric_TCP(laddr string, raddr string, 
 }
 
 func (t *TraversalTool) SymmetricToPortRestrict_TCP(laddr string, raddr string, rNAT NATTypeINfo) (TraversalInfo, error) {
-	time.Sleep(time.Second)
+	time.Sleep(time.Second) //等待对方打洞
 	fmt.Println("dial tcp", laddr, raddr)
 	tcpConn, err := reuse.Dial("tcp4", laddr, raddr)
 	if err != nil {
