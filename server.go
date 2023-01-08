@@ -512,7 +512,7 @@ func handleTCPHolePunching(tcpConn1, tcpConn2 *net.TCPConn, natInfo1, natInfo2 N
 			log.Println("receive port1", newRaddr1)
 		case newRaddr2 = <-portCh2:
 			log.Println("receive port2", newRaddr2)
-		case <-time.After(5 * time.Second):
+		case <-time.After(10 * time.Second):
 			log.Println("receive port timeout")
 			return errors.New("receive port timeout")
 		}
@@ -750,7 +750,7 @@ func (t *TraversalServer) handleTestNatType(rudpConn *ReliableUDP, raddr string,
 	}
 	natInfo.NATType = FinallType
 	if FinallType == Symmetric {
-		natInfo.PortChangeRule = changeRule
+		natInfo.UDPPortChangeRule = changeRule
 	}
 	data, err := json.Marshal(natInfo)
 	if err != nil {

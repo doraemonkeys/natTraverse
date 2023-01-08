@@ -65,12 +65,13 @@ func (t *TraversalTool) BeginTraversal() (TraversalInfo, error) {
 		t.NATInfo = natType
 	}
 	fmt.Println("nat type", t.NATInfo.NATType.String())
-	fmt.Println("port change rule", t.NATInfo.PortChangeRule)
+	fmt.Println("port change rule", t.NATInfo.UDPPortChangeRule)
 	fmt.Println("PortInfluencedByProtocol", t.NATInfo.PortInfluencedByProtocol)
 	rand.Seed(int64(time.Now().Nanosecond()))
 	if t.LocalAddr == "" {
 		t.LocalAddr = ":" + fmt.Sprint(rand.Intn(20000)+10000)
 	}
+	fmt.Println("rand local addr", t.LocalAddr)
 	t.WantNetwork = strings.ToLower(t.WantNetwork)
 	if t.WantNetwork != "udp4" && t.WantNetwork != "tcp4" {
 		return TraversalInfo{}, fmt.Errorf("only support udp4 and tcp4")
@@ -135,7 +136,7 @@ func (t *TraversalTool) traversal() (TraversalInfo, error) {
 	if err != nil {
 		return TraversalInfo{}, fmt.Errorf("unmarshal punching info error %w", err)
 	}
-	if t.Predictor == nil && punchingInfo.RNAT.PortChangeRule == Linear {
+	if t.Predictor == nil && punchingInfo.RNAT.UDPPortChangeRule == Linear {
 		t.Predictor = &LinearPortPredictor{}
 	}
 	switch t.WantNetwork {
@@ -153,11 +154,14 @@ func (t *TraversalTool) traversalTCP(tcpConn *net.TCPConn, punchingInfo holePunc
 	go func() {
 		newServerAddr := t.ServerAddr[:strings.LastIndex(t.ServerAddr, ":")+1] + punchingInfo.ServerPort
 		fmt.Println("newServerAddr", newServerAddr)
-		_, err := reuse.Dial("tcp4", t.LocalAddr, newServerAddr)
+		//让服务器获取t.LocalAddr在NAT中的映射公网地址
+		c, err := reuse.Dial("tcp4", t.LocalAddr, newServerAddr)
 		if err != nil {
 			fmt.Println("dial tcp error", err)
 			return
 		}
+		c.Close()
+		//接收服务器返回的对方公网地址:新端口
 		msg, err := TCPReceiveMessage(tcpConn)
 		if err != nil {
 			fmt.Println("receive message error", err)
@@ -190,6 +194,7 @@ func (t *TraversalTool) traversalTCP(tcpConn *net.TCPConn, punchingInfo holePunc
 				return t.passiveBothSymmetric_TCP(t.LocalAddr, targetRemoteAddr, isSameNAT, punchingInfo.RNAT)
 			}
 			return t.activeBothSymmetric_TCP(t.LocalAddr, targetRemoteAddr, isSameNAT, punchingInfo.RNAT)
+
 		case FullCone, RestrictedCone, PortRestrictedCone:
 			return t.SymmetricToPortRestrict_TCP(t.LocalAddr, targetRemoteAddr, punchingInfo.RNAT)
 		default:
@@ -351,12 +356,13 @@ func (t *TraversalTool) activeBothNoSymmetric_UDP(laddr string, raddr string, rN
 func (t *TraversalTool) passiveBothNoSymmetric_TCP(laddr string, raddr string, rNAT NATTypeINfo) (TraversalInfo, error) {
 	//go  reuse.Dial("tcp4", laddr, raddr)
 	go func() {
-		c, err := reuse.Dial("tcp4", laddr, raddr)
+		c, err := reuse.Dial("tcp4", laddr, raddr) //打洞
 		if err != nil {
-			fmt.Println(err)
+			fmt.Println("expected dial error", err)
 			return
 		}
-		fmt.Println(c.LocalAddr().String())
+		//连接成功不会发生
+		fmt.Println(c.LocalAddr().String(), "connect to", c.RemoteAddr().String())
 	}()
 	Listener, err := reuse.Listen("tcp4", laddr)
 	if err != nil {
@@ -364,7 +370,7 @@ func (t *TraversalTool) passiveBothNoSymmetric_TCP(laddr string, raddr string, r
 		return TraversalInfo{}, err
 	}
 	tcpListener := Listener.(*net.TCPListener)
-	tcpListener.SetDeadline(time.Now().Add(time.Second * 3))
+	tcpListener.SetDeadline(time.Now().Add(t.TCPTimeout))
 	defer tcpListener.Close()
 	tcpConn, err := tcpListener.AcceptTCP()
 	if err != nil {
@@ -381,16 +387,27 @@ func (t *TraversalTool) passiveBothNoSymmetric_TCP(laddr string, raddr string, r
 }
 
 func (t *TraversalTool) activeBothNoSymmetric_TCP(laddr string, raddr string, rNAT NATTypeINfo) (TraversalInfo, error) {
-	tcpConn, err := net.DialTimeout("tcp4", raddr, time.Second*3)
+	// tcpConn, err := net.DialTimeout("tcp4", raddr, t.TCPTimeout)
+	// if err != nil {
+	// 	return TraversalInfo{}, err
+	// }
+	// endInfo := TraversalInfo{
+	// 	LocalNat:  t.NATInfo,
+	// 	RemoteNat: rNAT,
+	// 	Laddr:     laddr,
+	// 	Raddr:     raddr,
+	// 	TCPConn:   tcpConn.(*net.TCPConn),
+	// }
+	conn, err := reuse.Dial("tcp4", laddr, raddr)
 	if err != nil {
-		return TraversalInfo{}, err
+		return TraversalInfo{}, fmt.Errorf("final attempt to establish a TCP connection failed: %w", err)
 	}
 	endInfo := TraversalInfo{
 		LocalNat:  t.NATInfo,
 		RemoteNat: rNAT,
 		Laddr:     laddr,
 		Raddr:     raddr,
-		TCPConn:   tcpConn.(*net.TCPConn),
+		TCPConn:   conn.(*net.TCPConn),
 	}
 	return endInfo, nil
 }
@@ -829,7 +846,7 @@ func (t *TraversalTool) passiveBothSymmetric_TCP(laddr string, raddr string, InS
 		return TraversalInfo{}, err
 	}
 	tcpListener := Listener.(*net.TCPListener)
-	tcpListener.SetDeadline(time.Now().Add(time.Second * 3))
+	tcpListener.SetDeadline(time.Now().Add(t.TCPTimeout))
 
 	conn, err := tcpListener.AcceptTCP()
 	if err != nil {
