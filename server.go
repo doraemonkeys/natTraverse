@@ -264,6 +264,7 @@ func handleUDPHolePunching(tcpConn1, tcpConn2 *net.TCPConn, natInfo1, natInfo2 N
 	//设置两个节点谁主动谁被动
 	var conn1Isactive bool
 	if natInfo1.NATType != Symmetric && natInfo2.NATType == Symmetric {
+		//PortRestrict To Symmetric
 		conn1Isactive = false
 	} else {
 		conn1Isactive = true
@@ -429,11 +430,12 @@ func handleTCPHolePunching(tcpConn1, tcpConn2 *net.TCPConn, natInfo1, natInfo2 N
 		tcpConn.Close()
 	}()
 	//设置两个节点谁主动谁被动
-	var conn1Isactive bool
+	var conn1IsActive bool
 	if natInfo1.NATType != Symmetric && natInfo2.NATType == Symmetric {
-		conn1Isactive = false
+		//PortRestrictToSymmetric_TCP
+		conn1IsActive = false
 	} else {
-		conn1Isactive = true
+		conn1IsActive = true
 	}
 	//通知两个节点向我连接tcp以此获取结点的公网端口
 	msg1 := Message{
@@ -445,7 +447,7 @@ func handleTCPHolePunching(tcpConn1, tcpConn2 *net.TCPConn, natInfo1, natInfo2 N
 		RNAT:         natInfo2,
 		ServerPort:   fmt.Sprintf("%d", randPort1),
 	}
-	if conn1Isactive {
+	if conn1IsActive {
 		holeMsg1.MyType = active
 	} else {
 		holeMsg1.MyType = passive
@@ -466,7 +468,7 @@ func handleTCPHolePunching(tcpConn1, tcpConn2 *net.TCPConn, natInfo1, natInfo2 N
 		RNAT:         natInfo1,
 		ServerPort:   fmt.Sprintf("%d", randPort2),
 	}
-	if conn1Isactive {
+	if conn1IsActive {
 		holeMsg2.MyType = passive
 	} else {
 		holeMsg2.MyType = active
@@ -479,7 +481,7 @@ func handleTCPHolePunching(tcpConn1, tcpConn2 *net.TCPConn, natInfo1, natInfo2 N
 	msg2.Data = data2
 	//发送打洞协商消息,被动方先发
 	//先给打洞方(被动方)发端口信息，防止洞还没打好连接请求就到了
-	if conn1Isactive {
+	if conn1IsActive {
 		err = TCPSendMessage(tcpConn2, msg2)
 		if err != nil {
 			log.Println("send port negotiation message error", err)
@@ -537,7 +539,7 @@ func handleTCPHolePunching(tcpConn1, tcpConn2 *net.TCPConn, natInfo1, natInfo2 N
 		Type: StartPunching,
 		Data: []byte(newRaddr1),
 	}
-	if conn1Isactive {
+	if conn1IsActive {
 		err = TCPSendMessage(tcpConn2, msg2)
 		if err != nil {
 			log.Println("send port negotiation message error", err)
@@ -760,6 +762,7 @@ func (t *TraversalServer) handleTestNatType(rudpConn *ReliableUDP, raddr string,
 		IdentityToken: msg.IdentityToken,
 		Data:          data,
 	}
+	fmt.Println("send end result", string(data))
 	err = RUDPSendMessage(rudpConn, raddr, finnalMsg)
 	if err != nil {
 		log.Println("send message error", err)

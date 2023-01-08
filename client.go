@@ -47,11 +47,11 @@ func (t *TraversalTool) GetMyNatType() (NATTypeINfo, error) {
 		Type:          TestNatType,
 		IdentityToken: t.identityToken,
 	}
-	//发送两次(第一个UDP包可能会被路由器丢弃)
 	err = RUDPSendMessage(rudpConn, t.ServerAddr, msg)
 	if err != nil {
 		return NATTypeINfo{}, fmt.Errorf("connect to server error %w", err)
 	}
+	fmt.Println("send test nat type message")
 	return t.beginTestNatType(rudpConn)
 }
 
@@ -74,6 +74,9 @@ func (t *TraversalTool) BeginTraversal() (TraversalInfo, error) {
 	t.WantNetwork = strings.ToLower(t.WantNetwork)
 	if t.WantNetwork != "udp4" && t.WantNetwork != "tcp4" {
 		return TraversalInfo{}, fmt.Errorf("only support udp4 and tcp4")
+	}
+	if t.TCPTimeout == 0 {
+		t.TCPTimeout = 10 * time.Second
 	}
 	return t.traversal()
 }
@@ -121,7 +124,7 @@ func (t *TraversalTool) traversal() (TraversalInfo, error) {
 		return TraversalInfo{}, fmt.Errorf("receive message error %w", err)
 	}
 	if msg.Type == ErrorResponse {
-		return TraversalInfo{}, fmt.Errorf("receive error response %s", msg.ErrorInfo)
+		return TraversalInfo{}, fmt.Errorf("receive error response: %s", msg.ErrorInfo)
 	}
 	if msg.Type != PunchingNegotiation {
 		return TraversalInfo{}, fmt.Errorf("receive wrong message type %d", msg.Type)
@@ -466,7 +469,7 @@ func (t *TraversalTool) PortRestrictToSymmetric_TCP(laddr string, raddr string, 
 		return TraversalInfo{}, err
 	}
 	tcpListener := Listener.(*net.TCPListener)
-	tcpListener.SetDeadline(time.Now().Add(time.Second * 3))
+	tcpListener.SetDeadline(time.Now().Add(t.TCPTimeout))
 
 	conn, err := tcpListener.AcceptTCP()
 	if err != nil {
@@ -485,6 +488,8 @@ func (t *TraversalTool) PortRestrictToSymmetric_TCP(laddr string, raddr string, 
 }
 
 func (t *TraversalTool) SymmetricToPortRestrict_TCP(laddr string, raddr string, rNAT NATTypeINfo) (TraversalInfo, error) {
+	time.Sleep(time.Second)
+	fmt.Println("dial tcp", laddr, raddr)
 	tcpConn, err := reuse.Dial("tcp4", laddr, raddr)
 	if err != nil {
 		return TraversalInfo{}, err
@@ -682,7 +687,7 @@ func (t *TraversalTool) passiveBothSymmetric_UDP(laddr string, raddr string, InS
 func (t *TraversalTool) beginTestNatType(rudpConn *ReliableUDP) (NATTypeINfo, error) {
 	rudpConn.SetGlobalReceive()
 	for {
-		msg, _, err := RUDPReceiveAllMessage(rudpConn, time.Second*2)
+		msg, _, err := RUDPReceiveAllMessage(rudpConn, time.Second*10) //接收消息，超时时间为10s
 		if err != nil {
 			return NATTypeINfo{}, fmt.Errorf("receive message error %w", err)
 		}
@@ -699,7 +704,10 @@ func (t *TraversalTool) beginTestNatType(rudpConn *ReliableUDP) (NATTypeINfo, er
 		case ACK: //服务器确认收到消息
 			// log.Println("receive ack from", raddr.String())
 		case EndResult: //服务器确认NAT类型发回最终结果
-			t.handleEndResult(msg)
+			err := t.handleEndResult(msg)
+			if err != nil {
+				return NATTypeINfo{}, err
+			}
 			return t.NATInfo, nil //结束
 		case ErrorResponse: //服务器返回错误信息
 			return NATTypeINfo{}, fmt.Errorf("error response %s", msg.ErrorInfo)
@@ -896,17 +904,18 @@ func (t *TraversalTool) handlePortNegotiation(rudpConn *ReliableUDP, msg Message
 	return nil
 }
 
-func (t *TraversalTool) handleEndResult(msg Message) {
+func (t *TraversalTool) handleEndResult(msg Message) error {
 	if msg.ErrorInfo != "" {
 		log.Println("error response", msg.ErrorInfo)
-		return
+		return fmt.Errorf("error response %s", msg.ErrorInfo)
 	}
 	var err error
 	var natInfo NATTypeINfo
 	err = json.Unmarshal(msg.Data, &natInfo)
 	if err != nil {
 		log.Println("unmarshal nat info error", err)
-		return
+		return fmt.Errorf("unmarshal nat info error %w", err)
 	}
 	t.NATInfo = natInfo
+	return nil
 }

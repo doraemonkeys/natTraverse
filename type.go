@@ -5,6 +5,7 @@ import (
 	"net"
 	"strconv"
 	"sync"
+	"time"
 )
 
 type NATType int
@@ -97,6 +98,8 @@ type TraversalTool struct {
 	LocalAddr string
 	Predictor PortPredictor
 	NATInfo   NATTypeINfo
+	//TCP打洞时的超时时间
+	TCPTimeout time.Duration
 	//测试NAT类型的时候用,随机产生，服务器用于标识客户端
 	identityToken string
 }
