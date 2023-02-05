@@ -433,7 +433,11 @@ func (t *TraversalTool) bothNoSymmetric_TCP(laddr string, raddr string, rNAT NAT
 	}
 	tcpConn, err := net.DialTCP("tcp4", Laddr, Raddr)
 	if err != nil {
-		return TraversalInfo{}, err
+		//fmt.Println("try again")
+		tcpConn, err = net.DialTCP("tcp4", Laddr, Raddr)
+		if err != nil {
+			return TraversalInfo{}, err
+		}
 	}
 	endInfo := TraversalInfo{
 		LocalNat:  t.NATInfo,

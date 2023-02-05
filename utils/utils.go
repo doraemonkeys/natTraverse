@@ -12,8 +12,6 @@ import (
 	"net"
 	"strings"
 	"time"
-
-	"github.com/lucas-clemente/quic-go"
 )
 
 // 判断本地端口是否被占用(未占用会阻塞1秒等待超时，慎用)。
@@ -127,19 +125,19 @@ func WithTimeout2[T any](d time.Duration, f func() (T, error)) (T, error) {
 }
 
 // only support udp4
-func QuicDial(laddr string, raddr string) (quic.Connection, error) {
-	tlsConf := &tls.Config{
-		InsecureSkipVerify: true,
-		//NextProtos是一个支持的应用层协议列表，按照优先级顺序排列
-		NextProtos: []string{"quic"},
-	}
-	udpConn, err := net.ListenPacket("udp4", laddr)
-	if err != nil {
-		return nil, err
-	}
-	remoteAddr, err := net.ResolveUDPAddr("udp4", raddr)
-	if err != nil {
-		return nil, err
-	}
-	return quic.Dial(udpConn, remoteAddr, "", tlsConf, nil)
-}
+// func QuicDial(laddr string, raddr string) (quic.Connection, error) {
+// 	tlsConf := &tls.Config{
+// 		InsecureSkipVerify: true,
+// 		//NextProtos是一个支持的应用层协议列表，按照优先级顺序排列
+// 		NextProtos: []string{"quic"},
+// 	}
+// 	udpConn, err := net.ListenPacket("udp4", laddr)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	remoteAddr, err := net.ResolveUDPAddr("udp4", raddr)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	return quic.Dial(udpConn, remoteAddr, "", tlsConf, nil)
+// }

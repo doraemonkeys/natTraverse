@@ -10,57 +10,55 @@ import (
 	"math/rand"
 	"net"
 	"time"
-
-	"github.com/lucas-clemente/quic-go"
 )
 
-func QuicSendMessageQuic(stream quic.Stream, msg Message) error {
-	data, err := json.Marshal(msg)
-	if err != nil {
-		return err
-	}
-	var length = int32(len(data))
-	var buf = new(bytes.Buffer)
-	err = binary.Write(buf, binary.LittleEndian, length)
-	if err != nil {
-		return err
-	}
-	err = binary.Write(buf, binary.LittleEndian, data)
-	if err != nil {
-		return err
-	}
-	_, err = stream.Write(buf.Bytes())
-	if err != nil {
-		return err
-	}
-	return nil
-}
+// func QuicSendMessageQuic(stream quic.Stream, msg Message) error {
+// 	data, err := json.Marshal(msg)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	var length = int32(len(data))
+// 	var buf = new(bytes.Buffer)
+// 	err = binary.Write(buf, binary.LittleEndian, length)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	err = binary.Write(buf, binary.LittleEndian, data)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	_, err = stream.Write(buf.Bytes())
+// 	if err != nil {
+// 		return err
+// 	}
+// 	return nil
+// }
 
-func QuicReceiveMessage(stream quic.Stream) (Message, error) {
-	reader := bufio.NewReader(stream)
-	var length int32
-	lengthBuf, _ := reader.Peek(4)
-	err := binary.Read(bytes.NewReader(lengthBuf), binary.LittleEndian, &length)
-	if err != nil {
-		return Message{}, err
-	}
-	// Buffered返回缓冲中现有的可读取的字节数。
-	if int32(reader.Buffered()) < length+4 {
-		return Message{}, fmt.Errorf("data not enough")
-	}
-	// 读取真正的消息数据
-	data := make([]byte, length+4)
-	_, err = reader.Read(data)
-	if err != nil {
-		return Message{}, err
-	}
-	var msg Message
-	err = msg.unmarshal(data[4:])
-	if err != nil {
-		return Message{}, err
-	}
-	return msg, nil
-}
+// func QuicReceiveMessage(stream quic.Stream) (Message, error) {
+// 	reader := bufio.NewReader(stream)
+// 	var length int32
+// 	lengthBuf, _ := reader.Peek(4)
+// 	err := binary.Read(bytes.NewReader(lengthBuf), binary.LittleEndian, &length)
+// 	if err != nil {
+// 		return Message{}, err
+// 	}
+// 	// Buffered返回缓冲中现有的可读取的字节数。
+// 	if int32(reader.Buffered()) < length+4 {
+// 		return Message{}, fmt.Errorf("data not enough")
+// 	}
+// 	// 读取真正的消息数据
+// 	data := make([]byte, length+4)
+// 	_, err = reader.Read(data)
+// 	if err != nil {
+// 		return Message{}, err
+// 	}
+// 	var msg Message
+// 	err = msg.unmarshal(data[4:])
+// 	if err != nil {
+// 		return Message{}, err
+// 	}
+// 	return msg, nil
+// }
 
 func TCPReceiveMessage(conn *net.TCPConn) (Message, error) {
 	reader := bufio.NewReader(conn)
