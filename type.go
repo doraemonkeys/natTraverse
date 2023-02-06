@@ -176,5 +176,5 @@ const (
 type NATTypeINfo struct {
 	NATType                  NATType    `json:"nat_type"`
 	PortInfluencedByProtocol bool       `json:"port_influenced_by_protocol"`
-	UDPPortChangeRule        PortChange `json:"port_change_rule"`
+	UDPPortChangeRule        PortChange `json:"udp_port_change_rule"`
 }
