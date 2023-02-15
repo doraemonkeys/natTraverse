@@ -31,7 +31,7 @@ go get -u github.com/Doraemonkeys/natTraverse
 
 
 
-- 拥有公网IP的服务器
+- A server with a public IP
 
 ```go
 package main
