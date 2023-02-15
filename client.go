@@ -270,14 +270,14 @@ func (t *TraversalTool) traversalUDP(tcpConn *net.TCPConn, punchingInfo holePunc
 			}
 			return t.activeBothSymmetric_UDP(t.LocalAddr, targetRemoteAddr, isSameNAT, punchingInfo.RNAT)
 		case FullCone, RestrictedCone, PortRestrictedCone:
-			return t.SymmetricToPortRestrict_UDP(t.LocalAddr, targetRemoteAddr, punchingInfo.RNAT)
+			return t.symmetricToPortRestrict_UDP(t.LocalAddr, targetRemoteAddr, punchingInfo.RNAT)
 		default:
 			return TraversalInfo{}, fmt.Errorf("unknown NAT type %s", punchingInfo.RNAT.NATType)
 		}
 	} else {
 		switch punchingInfo.RNAT.NATType {
 		case Symmetric:
-			return t.PortRestrictToSymmetric_UDP(t.LocalAddr, targetRemoteAddr, punchingInfo.RNAT)
+			return t.portRestrictToSymmetric_UDP(t.LocalAddr, targetRemoteAddr, punchingInfo.RNAT)
 		case FullCone, RestrictedCone, PortRestrictedCone:
 			if punchingInfo.MyType == passive {
 				return t.passiveBothNoSymmetric_UDP(t.LocalAddr, targetRemoteAddr, punchingInfo.RNAT)
@@ -476,7 +476,7 @@ func (t *TraversalTool) bothNoSymmetric_TCP(laddr string, raddr string, rNAT NAT
 // }
 
 // 被动端，对方是对称NAT，打洞完成后，等待对方的连接
-func (t *TraversalTool) PortRestrictToSymmetric_UDP(laddr string, raddr string, rNAT NATTypeINfo) (TraversalInfo, error) {
+func (t *TraversalTool) portRestrictToSymmetric_UDP(laddr string, raddr string, rNAT NATTypeINfo) (TraversalInfo, error) {
 	if t.Predictor == nil {
 		return TraversalInfo{}, fmt.Errorf("symmetric NAT with random ports is unpredictable")
 	}
@@ -526,7 +526,7 @@ func (t *TraversalTool) PortRestrictToSymmetric_UDP(laddr string, raddr string, 
 }
 
 // 被动端，对方是对称NAT，打洞完成后，等待对方的连接
-func (t *TraversalTool) PortRestrictToSymmetric_TCP(laddr string, raddr string, rNAT NATTypeINfo) (TraversalInfo, error) {
+func (t *TraversalTool) portRestrictToSymmetric_TCP(laddr string, raddr string, rNAT NATTypeINfo) (TraversalInfo, error) {
 	// Not implemented yet
 
 	// if t.Predictor == nil {
@@ -570,7 +570,7 @@ func (t *TraversalTool) PortRestrictToSymmetric_TCP(laddr string, raddr string, 
 	return TraversalInfo{}, fmt.Errorf("not implemented yet")
 }
 
-func (t *TraversalTool) SymmetricToPortRestrict_TCP(laddr string, raddr string, rNAT NATTypeINfo) (TraversalInfo, error) {
+func (t *TraversalTool) symmetricToPortRestrict_TCP(laddr string, raddr string, rNAT NATTypeINfo) (TraversalInfo, error) {
 	// fmt.Println("dial tcp", laddr, raddr)
 	// tcpConn, err := reuse.Dial("tcp4", laddr, raddr)
 	// if err != nil {
@@ -587,7 +587,7 @@ func (t *TraversalTool) SymmetricToPortRestrict_TCP(laddr string, raddr string, 
 	return TraversalInfo{}, fmt.Errorf("not implemented yet")
 }
 
-func (t *TraversalTool) SymmetricToPortRestrict_UDP(laddr string, raddr string, rNAT NATTypeINfo) (TraversalInfo, error) {
+func (t *TraversalTool) symmetricToPortRestrict_UDP(laddr string, raddr string, rNAT NATTypeINfo) (TraversalInfo, error) {
 	LAddr, err := net.ResolveUDPAddr("udp4", laddr)
 	if err != nil {
 		return TraversalInfo{}, err
@@ -780,7 +780,7 @@ func (t *TraversalTool) beginTestNatType(rudpConn *ReliableUDP) (NATTypeINfo, er
 			if err != nil {
 				return NATTypeINfo{}, err
 			}
-			err = t.ProtocolChangeTest(rudpConn)
+			err = t.protocolChangeTest(rudpConn)
 			if err != nil {
 				return NATTypeINfo{}, err
 			}
@@ -928,7 +928,7 @@ func (t *TraversalTool) beginTestNatType(rudpConn *ReliableUDP) (NATTypeINfo, er
 // 	return endInfo, nil
 // }
 
-func (t *TraversalTool) ProtocolChangeTest(rudpConn *ReliableUDP) error {
+func (t *TraversalTool) protocolChangeTest(rudpConn *ReliableUDP) error {
 	laddr, err := net.ResolveTCPAddr("tcp4", rudpConn.LocalAddr().String())
 	if err != nil {
 		log.Println("resolve tcp addr error", err)

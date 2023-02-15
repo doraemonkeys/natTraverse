@@ -22,8 +22,8 @@ func (t *TraversalServer) Run() {
 	t.targetMapLock = &sync.Mutex{}
 	t.tonkenMapLock = &sync.Mutex{}
 	rand.Seed(time.Now().UnixNano())
-	go t.TestNATServer(TCPMsgCh)
-	t.TCPListenServer(TCPMsgCh)
+	go t.testNATServer(TCPMsgCh)
+	t.tCPListenServer(TCPMsgCh)
 	// t.UDPListen()
 	time.Sleep(time.Second * 1000)
 }
@@ -53,7 +53,7 @@ func (h *holePunchingNegotiationMsg) unmarshal(data []byte) error {
 	return json.Unmarshal(data, h)
 }
 
-func (t *TraversalServer) TCPListenServer(TCPMsgCh chan Message) {
+func (t *TraversalServer) tCPListenServer(TCPMsgCh chan Message) {
 	TCPladdr, err := net.ResolveTCPAddr("tcp4", t.ListenAddr)
 	if err != nil {
 		log.Println("resolve tcp addr error", err)
@@ -565,7 +565,7 @@ func handleTCPHolePunching(tcpConn1, tcpConn2 *net.TCPConn, natInfo1, natInfo2 N
 	return nil
 }
 
-func (t *TraversalServer) TestNATServer(TCPMsgCh chan Message) {
+func (t *TraversalServer) testNATServer(TCPMsgCh chan Message) {
 	laddr, err := net.ResolveUDPAddr("udp4", t.ListenAddr)
 	if err != nil {
 		panic(err)
