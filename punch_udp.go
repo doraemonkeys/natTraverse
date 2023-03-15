@@ -224,6 +224,7 @@ func SymmetricDail(raddr string, lport int, infoChan chan TraversalInfo, timeout
 		fmt.Println("listen udp error", err)
 		return
 	}
+	defer udpConn.Close()
 	UDPSendMessage(udpConn, raddr, Message{Type: ConnectionAck})
 	UDPSendMessage(udpConn, raddr, Message{Type: ConnectionAck})
 	err = UDPSendMessage(udpConn, raddr, Message{Type: ConnectionAck})
@@ -237,7 +238,11 @@ func SymmetricDail(raddr string, lport int, infoChan chan TraversalInfo, timeout
 			fmt.Println("receive message error", err)
 			return
 		}
-		if msg.Type == ConnectionAck {
+		if msg.Type == Empty {
+			UDPSendMessage(udpConn, raddr, Message{Type: ConnectionAck})
+			UDPSendMessage(udpConn, raddr, Message{Type: ConnectionAck})
+		}
+		if msg.Type == ConnectionAck || msg.Type == Empty {
 			endInfo := TraversalInfo{
 				Laddr: lAddr.String(),
 				Raddr: addr.String(),
@@ -245,7 +250,7 @@ func SymmetricDail(raddr string, lport int, infoChan chan TraversalInfo, timeout
 			infoChan <- endInfo
 			return
 		}
-		fmt.Println("success receive message", msg, "from", addr)
+		log.Println("success receive message", msg, "from", addr)
 	}
 }
 
@@ -265,6 +270,7 @@ func (t *TraversalTool) passiveBothSymmetric_UDP(laddr string, raddr string, InS
 	if err != nil {
 		return TraversalInfo{}, err
 	}
+	defer udpConn.Close()
 	if InSameNat {
 		//UDP打洞处于同一nat，被动等待的打洞方将预测对方的端口+22
 		//主动连接的一方先暂停1s，确保前20个端口分配给了对方，然后其余保存不变
@@ -307,5 +313,182 @@ func (t *TraversalTool) passiveBothSymmetric_UDP(laddr string, raddr string, InS
 			}
 			return endInfo, nil
 		}
+	}
+}
+
+func (t *TraversalTool) passiveBothSymmetric_UDP2(laddr string, raddr string, InSameNat bool, rNAT NATTypeINfo) (TraversalInfo, error) {
+	if t.Predictor == nil {
+		return TraversalInfo{}, fmt.Errorf("symmetric NAT with random ports is unpredictable")
+	}
+	rPort := strings.Split(raddr, ":")[1]
+	rIP := strings.Split(raddr, ":")[0]
+	fmt.Println("rPort", rPort)
+	t.Predictor.SetInitialPort(rPort)
+	// lAddr, err := net.ResolveUDPAddr("udp4", laddr)
+	// if err != nil {
+	// 	return TraversalInfo{}, err
+	// }
+	// udpConn, err := net.ListenUDP("udp4", lAddr)
+	// if err != nil {
+	// 	return TraversalInfo{}, err
+	// }
+	if InSameNat {
+		//UDP打洞处于同一nat，被动等待的打洞方将预测对方的端口+10
+		//主动连接的一方先暂停1s，确保前20个端口分配给了对方，然后其余保存不变
+		for i := 0; i < 10; i++ {
+			t.Predictor.NextPort()
+		}
+	}
+	//猜测一个对方的端口为rPort+5
+	for i := 0; i < 5; i++ {
+		t.Predictor.NextPort()
+	}
+	newRaddr := rIP + ":" + t.Predictor.NextPort()
+
+	randPort := rand.Intn(20000) + 10000
+	fmt.Println("rand port:", randPort)
+	infoChan := make(chan TraversalInfo, 1)
+
+	for i := 0; i < 10; i++ {
+		fmt.Println(":", randPort, "-------->", newRaddr)
+		go SymmetricEmptyDail(newRaddr, randPort, infoChan, t.UDPTimeout)
+		randPort++
+	}
+	select {
+	case endInfo := <-infoChan:
+		endInfo.LocalNat = t.NATInfo
+		endInfo.RemoteNat = rNAT
+		return endInfo, nil
+	case <-time.After(t.UDPTimeout):
+		return TraversalInfo{}, fmt.Errorf("hole punching failed, no response")
+	}
+
+}
+
+func (t *TraversalTool) activeBothSymmetric_UDP2(laddr string, raddr string, InSameNat bool, rNAT NATTypeINfo) (TraversalInfo, error) {
+	if t.Predictor == nil {
+		return TraversalInfo{}, fmt.Errorf("symmetric NAT with random ports is unpredictable")
+	}
+	fmt.Println("activeBothSymmetric_UDP")
+	rPort := strings.Split(raddr, ":")[1]
+	rIP := strings.Split(raddr, ":")[0]
+	fmt.Println("rPort", rPort)
+	t.Predictor.SetInitialPort(rPort)
+
+	for i := 0; i < 5; i++ {
+		t.Predictor.NextPort()
+	}
+	newRport := t.Predictor.NextPort()
+	fmt.Println("newRport", newRport)
+	newRaddr := rIP + ":" + newRport
+	fmt.Println("newRaddr", newRaddr)
+
+	randPort := rand.Intn(20000) + 10000
+	fmt.Println("rand port:", randPort)
+	infoChan := make(chan TraversalInfo, 1)
+
+	if InSameNat {
+		//UDP打洞处于同一nat，被动等待的打洞方将预测对方的端口+10
+		//主动连接的一方先暂停1s，确保前10个端口分配给了对方，然后其余保存不变
+		fmt.Println("InSameNat, wait 1s")
+		time.Sleep(time.Second / 2)
+	}
+	time.Sleep(time.Second / 2)
+	for i := 0; i < 10; i++ {
+		fmt.Println(":", randPort, "-------->", newRaddr)
+		go SymmetricDail2(newRaddr, randPort, infoChan, t.UDPTimeout)
+		randPort++
+	}
+	select {
+	case endInfo := <-infoChan:
+		endInfo.LocalNat = t.NATInfo
+		endInfo.RemoteNat = rNAT
+		return endInfo, nil
+	case <-time.After(t.UDPTimeout):
+		return TraversalInfo{}, fmt.Errorf("hole punching failed, no response")
+	}
+}
+
+func SymmetricDail2(raddr string, lport int, infoChan chan TraversalInfo, timeout time.Duration) {
+	lAddr, err := net.ResolveUDPAddr("udp4", ":"+strconv.Itoa(lport))
+	if err != nil {
+		fmt.Println("resolve udp addr error", err)
+		return
+	}
+	udpConn, err := net.ListenUDP("udp4", lAddr)
+	if err != nil {
+		fmt.Println("listen udp error", err)
+		return
+	}
+	defer udpConn.Close()
+	UDPSendMessage(udpConn, raddr, Message{Type: ConnectionAck})
+	UDPSendMessage(udpConn, raddr, Message{Type: ConnectionAck})
+	err = UDPSendMessage(udpConn, raddr, Message{Type: ConnectionAck})
+	if err != nil {
+		fmt.Println("send message error", err)
+		return
+	}
+	for {
+		msg, addr, err := UDPReceiveMessage(udpConn, timeout)
+		if err != nil {
+			fmt.Println("receive message error", err)
+			return
+		}
+		if msg.Type == Empty {
+			UDPSendMessage(udpConn, raddr, Message{Type: ConnectionAck})
+			UDPSendMessage(udpConn, raddr, Message{Type: ConnectionAck})
+		}
+		if msg.Type == ConnectionAck || msg.Type == Empty {
+			endInfo := TraversalInfo{
+				Laddr: lAddr.String(),
+				Raddr: addr.String(),
+			}
+			infoChan <- endInfo
+			return
+		}
+		log.Println("success receive message", msg, "from", addr)
+	}
+}
+
+func SymmetricEmptyDail(raddr string, lport int, infoChan chan TraversalInfo, timeout time.Duration) {
+	lAddr, err := net.ResolveUDPAddr("udp4", ":"+strconv.Itoa(lport))
+	if err != nil {
+		fmt.Println("resolve udp addr error", err)
+		return
+	}
+	udpConn, err := net.ListenUDP("udp4", lAddr)
+	if err != nil {
+		fmt.Println("listen udp error", err)
+		return
+	}
+	defer udpConn.Close()
+	UDPSendMessage(udpConn, raddr, Message{Type: Empty})
+	UDPSendMessage(udpConn, raddr, Message{Type: Empty})
+	err = UDPSendMessage(udpConn, raddr, Message{Type: Empty})
+	if err != nil {
+		fmt.Println("send message error", err)
+		return
+	}
+	for {
+		msg, addr, err := UDPReceiveMessage(udpConn, timeout)
+		if err != nil {
+			fmt.Println("receive message error", err)
+			return
+		}
+		if msg.Type == ConnectionAck {
+			UDPSendMessage(udpConn, addr.String(), Message{Type: ConnectionAck})
+			UDPSendMessage(udpConn, addr.String(), Message{Type: ConnectionAck})
+			err := UDPSendMessage(udpConn, addr.String(), Message{Type: ConnectionAck})
+			if err != nil {
+				fmt.Println("send message error", err)
+			}
+			endInfo := TraversalInfo{
+				Laddr: lAddr.String(),
+				Raddr: addr.String(),
+			}
+			infoChan <- endInfo
+			return
+		}
+		log.Println("success receive message", msg, "from", addr)
 	}
 }

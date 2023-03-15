@@ -78,10 +78,10 @@ func (t *TraversalTool) BeginTraversal() (TraversalInfo, error) {
 		return TraversalInfo{}, fmt.Errorf("only support udp4 and tcp4")
 	}
 	if t.TCPTimeout == 0 {
-		t.TCPTimeout = 10 * time.Second
+		t.TCPTimeout = 8 * time.Second
 	}
 	if t.UDPTimeout == 0 {
-		t.UDPTimeout = 10 * time.Second
+		t.UDPTimeout = 8 * time.Second
 	}
 	return t.traversal()
 }
@@ -275,9 +275,11 @@ func (t *TraversalTool) traversalUDP(tcpConn *net.TCPConn, punchingInfo holePunc
 		switch punchingInfo.RNAT.NATType {
 		case Symmetric:
 			if punchingInfo.MyType == passive {
-				return t.passiveBothSymmetric_UDP(t.LocalAddr, targetRemoteAddr, isSameNAT, punchingInfo.RNAT)
+				//return t.passiveBothSymmetric_UDP(t.LocalAddr, targetRemoteAddr, isSameNAT, punchingInfo.RNAT)
+				return t.passiveBothSymmetric_UDP2(t.LocalAddr, targetRemoteAddr, isSameNAT, punchingInfo.RNAT)
 			}
-			return t.activeBothSymmetric_UDP(t.LocalAddr, targetRemoteAddr, isSameNAT, punchingInfo.RNAT)
+			//return t.activeBothSymmetric_UDP(t.LocalAddr, targetRemoteAddr, isSameNAT, punchingInfo.RNAT)
+			return t.activeBothSymmetric_UDP2(t.LocalAddr, targetRemoteAddr, isSameNAT, punchingInfo.RNAT)
 		case FullCone, RestrictedCone, PortRestrictedCone:
 			return t.symmetricToPortRestrict_UDP(t.LocalAddr, targetRemoteAddr, punchingInfo.RNAT)
 		default:
