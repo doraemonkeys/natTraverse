@@ -87,6 +87,35 @@ func main() {
 	}
 	fmt.Println("success")
 	fmt.Println("TraversalInfo:", TraversalInfo)
+	laddr, _ := net.ResolveUDPAddr("udp4", TraversalInfo.Laddr)
+	raddr, _ := net.ResolveUDPAddr("udp4", TraversalInfo.Raddr)
+	conn, err := net.DialUDP("udp4", laddr, raddr)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer conn.Close()
+	go func() {
+		for {
+			buf := make([]byte, 1024)
+			n, err := conn.Read(buf)
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+			fmt.Println("recv:", string(buf[:n]))
+		}
+	}()
+	fmt.Printf("you can send message to %s\n", raddr.String())
+	for {
+		var msg string
+		fmt.Scan(&msg)
+		_, err = conn.Write([]byte(msg))
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+	}
 }
 ```
 
