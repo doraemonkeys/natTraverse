@@ -10,6 +10,8 @@ import (
 	"math/rand"
 	"net"
 	"time"
+
+	"github.com/Doraemonkeys/reliableUDP"
 )
 
 // func QuicSendMessageQuic(stream quic.Stream, msg Message) error {
@@ -145,7 +147,7 @@ func UDPSendMessage(conn *net.UDPConn, addr string, msg Message) error {
 
 // 调用前需要先调用conn.SetGlobalReceive()
 // 不用全局接收后别忘了conn.CancelGlobalReceive()
-func RUDPReceiveAllMessage(conn *ReliableUDP, timeout time.Duration) (Message, *net.UDPAddr, error) {
+func RUDPReceiveAllMessage(conn *reliableUDP.ReliableUDP, timeout time.Duration) (Message, *net.UDPAddr, error) {
 	data, addr, err := conn.ReceiveAll(timeout)
 	if err != nil {
 		return Message{}, nil, err
@@ -159,7 +161,7 @@ func RUDPReceiveAllMessage(conn *ReliableUDP, timeout time.Duration) (Message, *
 	return msg, addr, nil
 }
 
-func RUDPReceiveMessage(conn *ReliableUDP, addr *net.UDPAddr, timeout time.Duration) (Message, error) {
+func RUDPReceiveMessage(conn *reliableUDP.ReliableUDP, addr *net.UDPAddr, timeout time.Duration) (Message, error) {
 	data, err := conn.Receive(addr, timeout)
 	if err != nil {
 		return Message{}, err
@@ -172,7 +174,7 @@ func RUDPReceiveMessage(conn *ReliableUDP, addr *net.UDPAddr, timeout time.Durat
 	return msg, nil
 }
 
-func RUDPSendMessage(conn *ReliableUDP, addr string, msg Message) error {
+func RUDPSendMessage(conn *reliableUDP.ReliableUDP, addr string, msg Message) error {
 	data, err := json.Marshal(msg)
 	if err != nil {
 		return err
@@ -181,14 +183,14 @@ func RUDPSendMessage(conn *ReliableUDP, addr string, msg Message) error {
 	if err != nil {
 		return err
 	}
-	err = conn.Send(data, raddr)
+	err = conn.Send(raddr, data, 0)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func RUDPSendUnreliableMessage(conn *ReliableUDP, addr string, msg Message) error {
+func RUDPSendUnreliableMessage(conn *reliableUDP.ReliableUDP, addr string, msg Message) error {
 	data, err := json.Marshal(msg)
 	if err != nil {
 		return err

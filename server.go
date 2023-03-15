@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Doraemonkeys/reliableUDP"
 )
 
 func (t *TraversalServer) Run() {
@@ -227,7 +229,7 @@ func handleUDPHolePunching(tcpConn1, tcpConn2 *net.TCPConn, natInfo1, natInfo2 N
 		log.Println("listen udp error", err)
 		return err
 	}
-	tempRudpConn1 := NewReliableUDP(tempUdpConn1)
+	tempRudpConn1 := reliableUDP.NewReliableUDP(tempUdpConn1)
 	tempRudpConn1.SetGlobalReceive()
 
 	tempUdpConn2, err := UDPRandListen()
@@ -235,7 +237,7 @@ func handleUDPHolePunching(tcpConn1, tcpConn2 *net.TCPConn, natInfo1, natInfo2 N
 		log.Println("listen udp error", err)
 		return err
 	}
-	tempRudpConn2 := NewReliableUDP(tempUdpConn2)
+	tempRudpConn2 := reliableUDP.NewReliableUDP(tempUdpConn2)
 	tempRudpConn2.SetGlobalReceive()
 
 	randPort1 := tempUdpConn1.LocalAddr().(*net.UDPAddr).Port
@@ -574,7 +576,7 @@ func (t *TraversalServer) testNATServer(TCPMsgCh chan Message) {
 	if err != nil {
 		panic(err)
 	}
-	rudpConn := NewReliableUDP(udpConn)
+	rudpConn := reliableUDP.NewReliableUDP(udpConn)
 	defer rudpConn.Close()
 	rudpConn.SetGlobalReceive()
 	var msg Message
@@ -619,7 +621,7 @@ func (t *TraversalServer) testNATServer(TCPMsgCh chan Message) {
 	}
 }
 
-func (t *TraversalServer) handleTestNatType(rudpConn *ReliableUDP, raddr string, identityToken string, UDPMsgCh chan Message) {
+func (t *TraversalServer) handleTestNatType(rudpConn *reliableUDP.ReliableUDP, raddr string, identityToken string, UDPMsgCh chan Message) {
 	defer func() {
 		t.targetMapLock.Lock()
 		delete(t.targetMap, identityToken)
@@ -639,7 +641,7 @@ func (t *TraversalServer) handleTestNatType(rudpConn *ReliableUDP, raddr string,
 		log.Println("listen udp error", err)
 		return
 	}
-	tempRUdpConn := NewReliableUDP(tempUDPConn)
+	tempRUdpConn := reliableUDP.NewReliableUDP(tempUDPConn)
 	defer tempRUdpConn.Close()
 	//defer tempUdpConn.Close()
 	randPort := tempRUdpConn.LocalAddr().String()[strings.LastIndex(tempRUdpConn.LocalAddr().String(), ":")+1:]
@@ -690,7 +692,7 @@ func (t *TraversalServer) handleTestNatType(rudpConn *ReliableUDP, raddr string,
 			log.Println("listen udp error", err)
 			return
 		}
-		tempRUdpConn := NewReliableUDP(tempUDPConn)
+		tempRUdpConn := reliableUDP.NewReliableUDP(tempUDPConn)
 		defer tempRUdpConn.Close()
 		msg2 := Message{
 			Type: ServerPortChangeTest,

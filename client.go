@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Doraemonkeys/reliableUDP"
 	"github.com/google/uuid"
 	reuse "github.com/libp2p/go-reuseport"
 )
@@ -36,7 +37,7 @@ func (t *TraversalTool) GetMyNatType() (NATTypeINfo, error) {
 	if err != nil {
 		return NATTypeINfo{}, fmt.Errorf("listen udp error %w", err)
 	}
-	rudpConn := NewReliableUDP(udpConn)
+	rudpConn := reliableUDP.NewReliableUDP(udpConn)
 	defer rudpConn.Close()
 	if LocalNatType.NATType != UnKnown {
 		t.NATInfo = LocalNatType
@@ -231,7 +232,7 @@ func (t *TraversalTool) traversalUDP(tcpConn *net.TCPConn, punchingInfo holePunc
 		if err != nil {
 			return
 		}
-		rudpConn := NewReliableUDP(udpConn)
+		rudpConn := reliableUDP.NewReliableUDP(udpConn)
 		defer rudpConn.Close()
 		err = RUDPSendMessage(rudpConn, newServerAddr, Message{Type: Empty})
 		if err != nil {
@@ -299,7 +300,7 @@ func (t *TraversalTool) passiveBothNoSymmetric_UDP(laddr string, raddr string, r
 		return TraversalInfo{}, err
 	}
 	emptyMsg := Message{Type: Empty}
-	rudpConn := NewReliableUDP(udpConn)
+	rudpConn := reliableUDP.NewReliableUDP(udpConn)
 	defer rudpConn.Close()
 	//这两个UDP的信息仅仅负责打洞，然后等待对方的连接
 	RUDPSendUnreliableMessage(rudpConn, raddr, emptyMsg)
@@ -340,7 +341,7 @@ func (t *TraversalTool) activeBothNoSymmetric_UDP(laddr string, raddr string, rN
 	if err != nil {
 		return TraversalInfo{}, err
 	}
-	rudpConn := NewReliableUDP(udpConn)
+	rudpConn := reliableUDP.NewReliableUDP(udpConn)
 	defer rudpConn.Close()
 	mag := Message{Type: ConnectionAck}
 	err = RUDPSendMessage(rudpConn, raddr, mag)
@@ -492,7 +493,7 @@ func (t *TraversalTool) portRestrictToSymmetric_UDP(laddr string, raddr string, 
 	if err != nil {
 		return TraversalInfo{}, err
 	}
-	rudpConn := NewReliableUDP(udpConn)
+	rudpConn := reliableUDP.NewReliableUDP(udpConn)
 	defer rudpConn.Close()
 	rudpConn.SetGlobalReceive()
 	go func() {
@@ -596,7 +597,7 @@ func (t *TraversalTool) symmetricToPortRestrict_UDP(laddr string, raddr string, 
 	if err != nil {
 		return TraversalInfo{}, err
 	}
-	rudpConn := NewReliableUDP(udpConn)
+	rudpConn := reliableUDP.NewReliableUDP(udpConn)
 	defer rudpConn.Close()
 	rudpConn.SetGlobalReceive()
 	for i := 0; i < 3; i++ {
@@ -767,7 +768,7 @@ func (t *TraversalTool) passiveBothSymmetric_UDP(laddr string, raddr string, InS
 	}
 }
 
-func (t *TraversalTool) beginTestNatType(rudpConn *ReliableUDP) (NATTypeINfo, error) {
+func (t *TraversalTool) beginTestNatType(rudpConn *reliableUDP.ReliableUDP) (NATTypeINfo, error) {
 	rudpConn.SetGlobalReceive()
 	for {
 		msg, _, err := RUDPReceiveAllMessage(rudpConn, time.Second*10) //接收消息，超时时间为10s
@@ -928,7 +929,7 @@ func (t *TraversalTool) beginTestNatType(rudpConn *ReliableUDP) (NATTypeINfo, er
 // 	return endInfo, nil
 // }
 
-func (t *TraversalTool) protocolChangeTest(rudpConn *ReliableUDP) error {
+func (t *TraversalTool) protocolChangeTest(rudpConn *reliableUDP.ReliableUDP) error {
 	laddr, err := net.ResolveTCPAddr("tcp4", rudpConn.LocalAddr().String())
 	if err != nil {
 		log.Println("resolve tcp addr error", err)
@@ -958,7 +959,7 @@ func (t *TraversalTool) protocolChangeTest(rudpConn *ReliableUDP) error {
 	return nil
 }
 
-func (t *TraversalTool) handleServerPortChangeTest(rudpConn *ReliableUDP) error {
+func (t *TraversalTool) handleServerPortChangeTest(rudpConn *reliableUDP.ReliableUDP) error {
 	msg := Message{
 		Type:          ServerPortChangeTestResponse,
 		IdentityToken: t.identityToken,
@@ -970,7 +971,7 @@ func (t *TraversalTool) handleServerPortChangeTest(rudpConn *ReliableUDP) error 
 	return nil
 }
 
-func (t *TraversalTool) handlePortNegotiation(rudpConn *ReliableUDP, msg Message) error {
+func (t *TraversalTool) handlePortNegotiation(rudpConn *reliableUDP.ReliableUDP, msg Message) error {
 	var port = string(msg.Data)
 	tempAddr := t.ServerAddr[:strings.LastIndex(t.ServerAddr, ":")+1] + port
 	fmt.Println("temp addr", tempAddr)
