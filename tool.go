@@ -135,7 +135,7 @@ func UDPReceiveMessage(conn *net.UDPConn, timeout time.Duration) (Message, *net.
 		conn.SetReadDeadline(time.Now().Add(timeout))
 		defer conn.SetReadDeadline(time.Time{}) //取消超时
 	}
-	fmt.Println("UDPReceiveMessage")
+	//fmt.Println("UDPReceiveMessage")
 	n, addr, err := conn.ReadFromUDP(buf[0:])
 	if err != nil {
 		return Message{}, nil, err
