@@ -1,7 +1,6 @@
 package natTraverse
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
@@ -63,25 +62,45 @@ import (
 // }
 
 func TCPReceiveMessage(conn *net.TCPConn) (Message, error) {
-	reader := bufio.NewReader(conn)
 	var length int32
-	lengthBuf, _ := reader.Peek(4)
-	err := binary.Read(bytes.NewReader(lengthBuf), binary.LittleEndian, &length)
+	var lengthBuf [4]byte
+	//读满4个字节
+	n := 0
+	for {
+		var tempBuf [1]byte
+		var tempNum int
+		var err error
+		tempNum, err = conn.Read(tempBuf[:])
+		if err != nil {
+			return Message{}, err
+		}
+		lengthBuf[n] = tempBuf[0]
+		n += tempNum
+		if n == 4 {
+			break
+		}
+	}
+	err := binary.Read(bytes.NewReader(lengthBuf[:]), binary.LittleEndian, &length)
 	if err != nil {
 		return Message{}, err
-	}
-	// Buffered返回缓冲中现有的可读取的字节数。
-	if int32(reader.Buffered()) < length+4 {
-		return Message{}, fmt.Errorf("data not enough")
 	}
 	// 读取真正的消息数据
-	data := make([]byte, length+4)
-	_, err = reader.Read(data)
-	if err != nil {
-		return Message{}, err
+	data := make([]byte, length)
+	n = 0
+	for {
+		var tempNum int
+		var err error
+		tempNum, err = conn.Read(data[n:])
+		if err != nil {
+			return Message{}, err
+		}
+		n += tempNum
+		if n == int(length) {
+			break
+		}
 	}
 	var msg Message
-	err = msg.unmarshal(data[4:])
+	err = msg.unmarshal(data)
 	if err != nil {
 		return Message{}, err
 	}
