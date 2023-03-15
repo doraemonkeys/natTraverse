@@ -3,9 +3,9 @@ module github.com/Doraemonkeys/natTraverse
 go 1.19
 
 require (
+	github.com/Doraemonkeys/reliableUDP v0.0.0-20230315034222-5cf76290b06e
 	github.com/google/uuid v1.3.0
 	github.com/libp2p/go-reuseport v0.2.0
-	github.com/Doraemonkeys/reliableUDP v0.0.0-20230315034222-5cf76290b06e // indirect
 )
 
 require (
