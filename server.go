@@ -18,6 +18,9 @@ import (
 )
 
 func (t *TraversalServer) Run() {
+	if t.testNATTimeout == 0 {
+		t.testNATTimeout = 5 * time.Second
+	}
 	t.targetMap = make(map[string]chan Message)                //udp分发消息用
 	t.tonkenMap = make(map[string]chan holePunchingConnection) //tcp找到两个想建立连接的节点
 	TCPMsgCh := make(chan Message, 10)                         //TCP To UDP
@@ -27,7 +30,7 @@ func (t *TraversalServer) Run() {
 	go t.testNATServer(TCPMsgCh)
 	t.tCPListenServer(TCPMsgCh)
 	// t.UDPListen()
-	time.Sleep(time.Second * 1000)
+	//time.Sleep(time.Second * 1000)
 }
 
 type holePunchingConnection struct {
@@ -169,6 +172,7 @@ func (t *TraversalServer) handleConnection(tcpConn *net.TCPConn, msg Message) er
 	case hole = <-ch:
 		tcpConn2 = hole.TCPConn
 		fmt.Println("holepunching object:", tcpConn.RemoteAddr().String(), tcpConn2.RemoteAddr().String())
+	//最多等待打洞的对象30秒
 	case <-time.After(time.Second * 30):
 		info := "connection timeout,not found holepunching object"
 		log.Println(info)
@@ -351,7 +355,7 @@ func handleUDPHolePunching(tcpConn1, tcpConn2 *net.TCPConn, natInfo1, natInfo2 N
 			log.Println("receive port1", newRaddr1)
 		case newRaddr2 = <-portCh2:
 			log.Println("receive port2", newRaddr2)
-		case <-time.After(5 * time.Second):
+		case <-time.After(5 * time.Second): //时间间隔太长两个peer节点的端口就不具有时效性了
 			log.Println("receive port timeout")
 			return errors.New("receive port timeout")
 		}
@@ -514,7 +518,7 @@ func handleTCPHolePunching(tcpConn1, tcpConn2 *net.TCPConn, natInfo1, natInfo2 N
 			log.Println("receive port1", newRaddr1)
 		case newRaddr2 = <-portCh2:
 			log.Println("receive port2", newRaddr2)
-		case <-time.After(10 * time.Second):
+		case <-time.After(5 * time.Second): //时间间隔太长两个peer节点的端口就不具有时效性了
 			log.Println("receive port timeout")
 			return errors.New("receive port timeout")
 		}
@@ -656,7 +660,7 @@ func (t *TraversalServer) handleTestNatType(rudpConn *reliableUDP.ReliableUDP, r
 	}
 	fmt.Println("send port negotiation to", raddr)
 	tempRUdpConn.SetGlobalReceive()
-	msg, newRAddr, err := RUDPReceiveAllMessage(tempRUdpConn, 2*time.Second)
+	msg, newRAddr, err := RUDPReceiveAllMessage(tempRUdpConn, t.testNATTimeout)
 	if err != nil {
 		log.Println("receive message error", err)
 		return
@@ -718,6 +722,8 @@ func (t *TraversalServer) handleTestNatType(rudpConn *reliableUDP.ReliableUDP, r
 					log.Println("unexpected message", msg.Type, msg.IdentityToken, string(msg.Data))
 				}
 			case <-time.After(time.Second * 2):
+				//大部分情况不接受来自同一IP不同端口的访问请求，即PortRestrictedCone
+				//所以这里的超时时间不能太长
 				log.Println("receive message timeout")
 				FinallType = PortRestrictedCone
 				if tempMsg.SrcPublicAddr != "" {
@@ -745,6 +751,7 @@ func (t *TraversalServer) handleTestNatType(rudpConn *reliableUDP.ReliableUDP, r
 				log.Println("unexpected message", msg.Type, msg.IdentityToken, string(msg.Data))
 			}
 		case <-time.After(time.Second * 10):
+			//正常情况下不会超时，一定会收到协议改变的消息(peer同一地址发送给服务器不同协议的消息)
 			log.Println("receive message timeout,unexpected case")
 			natInfo.PortInfluencedByProtocol = true
 			ok = false
@@ -771,5 +778,4 @@ func (t *TraversalServer) handleTestNatType(rudpConn *reliableUDP.ReliableUDP, r
 		return
 	}
 	fmt.Println("send end result to", raddr)
-	time.Sleep(time.Second * 2000)
 }

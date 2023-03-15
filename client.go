@@ -58,6 +58,7 @@ func (t *TraversalTool) GetMyNatType() (NATTypeINfo, error) {
 
 func (t *TraversalTool) BeginTraversal() (TraversalInfo, error) {
 	if LocalNatType.NATType == UnKnown {
+		t.testNATTimeout = 10 * time.Second
 		natType, err := t.GetMyNatType()
 		if err != nil {
 			return TraversalInfo{}, fmt.Errorf("get nat type error %w", err)
@@ -79,6 +80,9 @@ func (t *TraversalTool) BeginTraversal() (TraversalInfo, error) {
 	}
 	if t.TCPTimeout == 0 {
 		t.TCPTimeout = 10 * time.Second
+	}
+	if t.UDPTimeout == 0 {
+		t.UDPTimeout = 10 * time.Second
 	}
 	return t.traversal()
 }
@@ -183,7 +187,7 @@ func (t *TraversalTool) traversalTCP(tcpConn *net.TCPConn, punchingInfo holePunc
 	// }
 	var targetRemoteAddr string
 	select {
-	case <-time.After(5 * time.Second):
+	case <-time.After(t.TCPTimeout):
 		return TraversalInfo{}, fmt.Errorf("receive remote public addr timeout")
 	case targetRemoteAddr = <-addrChan:
 		fmt.Println("targetRemoteAddr", targetRemoteAddr)
@@ -258,7 +262,7 @@ func (t *TraversalTool) traversalUDP(tcpConn *net.TCPConn, punchingInfo holePunc
 	}
 	var targetRemoteAddr string
 	select {
-	case <-time.After(5 * time.Second):
+	case <-time.After(t.UDPTimeout):
 		return TraversalInfo{}, fmt.Errorf("receive remote public addr timeout")
 	case targetRemoteAddr = <-addrChan:
 		fmt.Println("targetRemoteAddr", targetRemoteAddr)
@@ -310,7 +314,7 @@ func (t *TraversalTool) passiveBothNoSymmetric_UDP(laddr string, raddr string, r
 	}
 	rudpConn.SetGlobalReceive()
 	for {
-		msg, newAddr, err := RUDPReceiveAllMessage(rudpConn, time.Second*2)
+		msg, newAddr, err := RUDPReceiveAllMessage(rudpConn, t.UDPTimeout)
 		if err != nil {
 			return TraversalInfo{}, fmt.Errorf("hole punching error %w", err)
 		}
@@ -510,7 +514,7 @@ func (t *TraversalTool) portRestrictToSymmetric_UDP(laddr string, raddr string, 
 		}
 	}()
 	for {
-		msg, addr, err := RUDPReceiveAllMessage(rudpConn, time.Second*3)
+		msg, addr, err := RUDPReceiveAllMessage(rudpConn, t.UDPTimeout)
 		if err != nil {
 			return TraversalInfo{}, fmt.Errorf("receive message error %w", err)
 		}
@@ -643,9 +647,10 @@ func (t *TraversalTool) activeBothSymmetric_UDP(laddr string, raddr string, InSa
 		fmt.Println("InSameNat, wait 1s")
 		time.Sleep(time.Second)
 	}
+	time.Sleep(time.Second)
 	for i := 0; i < 10; i++ {
 		fmt.Println("dial newRaddr", newRaddr, "randPort", randPort)
-		go SymmetricDail(newRaddr, randPort, infoChan)
+		go SymmetricDail(newRaddr, randPort, infoChan, t.UDPTimeout)
 		randPort++
 	}
 	for i := 0; i < 9; i++ {
@@ -658,7 +663,7 @@ func (t *TraversalTool) activeBothSymmetric_UDP(laddr string, raddr string, InSa
 	for i := 0; i < 10; i++ {
 		//10个不同的本地地址向对方同一个地址发送连接请求
 		fmt.Println("dial newRaddr", newRaddr, "randPort", randPort)
-		go SymmetricDail(newRaddr, randPort, infoChan)
+		go SymmetricDail(newRaddr, randPort, infoChan, t.UDPTimeout)
 		randPort++
 	}
 	select {
@@ -666,12 +671,12 @@ func (t *TraversalTool) activeBothSymmetric_UDP(laddr string, raddr string, InSa
 		endInfo.LocalNat = t.NATInfo
 		endInfo.RemoteNat = rNAT
 		return endInfo, nil
-	case <-time.After(time.Second * 3):
+	case <-time.After(t.UDPTimeout):
 		return TraversalInfo{}, fmt.Errorf("hole punching failed, no response")
 	}
 }
 
-func SymmetricDail(raddr string, lport int, infoChan chan TraversalInfo) {
+func SymmetricDail(raddr string, lport int, infoChan chan TraversalInfo, timeout time.Duration) {
 	lAddr, err := net.ResolveUDPAddr("udp4", ":"+strconv.Itoa(lport))
 	if err != nil {
 		fmt.Println("resolve udp addr error", err)
@@ -690,7 +695,7 @@ func SymmetricDail(raddr string, lport int, infoChan chan TraversalInfo) {
 		return
 	}
 	for {
-		msg, addr, err := UDPReceiveMessage(udpConn, time.Second*5)
+		msg, addr, err := UDPReceiveMessage(udpConn, timeout)
 		if err != nil {
 			fmt.Println("receive message error", err)
 			return
@@ -744,7 +749,7 @@ func (t *TraversalTool) passiveBothSymmetric_UDP(laddr string, raddr string, InS
 		}
 	}()
 	for {
-		msg, addr, err := UDPReceiveMessage(udpConn, time.Second*5)
+		msg, addr, err := UDPReceiveMessage(udpConn, t.UDPTimeout)
 		if err != nil {
 			fmt.Println("receive message error", err)
 			return TraversalInfo{}, err
@@ -771,7 +776,7 @@ func (t *TraversalTool) passiveBothSymmetric_UDP(laddr string, raddr string, InS
 func (t *TraversalTool) beginTestNatType(rudpConn *reliableUDP.ReliableUDP) (NATTypeINfo, error) {
 	rudpConn.SetGlobalReceive()
 	for {
-		msg, _, err := RUDPReceiveAllMessage(rudpConn, time.Second*10) //接收消息，超时时间为10s
+		msg, _, err := RUDPReceiveAllMessage(rudpConn, t.testNATTimeout)
 		if err != nil {
 			return NATTypeINfo{}, fmt.Errorf("receive message error %w", err)
 		}

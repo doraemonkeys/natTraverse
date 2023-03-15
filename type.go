@@ -101,6 +101,10 @@ type TraversalTool struct {
 	NATInfo   NATTypeINfo
 	//TCP打洞时的超时时间
 	TCPTimeout time.Duration
+	//UDP打洞时的超时时间
+	UDPTimeout time.Duration
+	//测试NAT类型的超时时间
+	testNATTimeout time.Duration
 	//测试NAT类型的时候用,随机产生，服务器用于标识客户端
 	identityToken string
 }
@@ -130,6 +134,8 @@ type TraversalServer struct {
 	targetMapLock *sync.Mutex
 	tonkenMap     map[string]chan holePunchingConnection
 	tonkenMapLock *sync.Mutex
+	//nat类型测试超时时间
+	testNATTimeout time.Duration
 }
 
 var LocalNatType = NATTypeINfo{NATType: UnKnown}

@@ -156,6 +156,7 @@ func RUDPReceiveAllMessage(conn *reliableUDP.ReliableUDP, timeout time.Duration)
 	//fmt.Println("RUDPReceiveAllMessage", string(data))
 	err = msg.unmarshal(data)
 	if err != nil {
+		log.Println("json.Unmarshal", err, "data", string(data))
 		return Message{}, nil, err
 	}
 	return msg, addr, nil
