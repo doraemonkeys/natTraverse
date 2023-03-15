@@ -136,6 +136,8 @@ type TraversalServer struct {
 	tonkenMapLock *sync.Mutex
 	//nat类型测试超时时间
 	testNATTimeout time.Duration
+	//接收消息超时时间
+	recvTimeout time.Duration
 }
 
 var LocalNatType = NATTypeINfo{NATType: UnKnown}

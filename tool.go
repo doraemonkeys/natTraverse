@@ -175,7 +175,8 @@ func RUDPReceiveMessage(conn *reliableUDP.ReliableUDP, addr *net.UDPAddr, timeou
 	return msg, nil
 }
 
-func RUDPSendMessage(conn *reliableUDP.ReliableUDP, addr string, msg Message) error {
+// 发送超时时间为timeout,如果timeout为0则默认为4秒
+func RUDPSendMessage(conn *reliableUDP.ReliableUDP, addr string, msg Message, timeout time.Duration) error {
 	data, err := json.Marshal(msg)
 	if err != nil {
 		return err
@@ -184,7 +185,7 @@ func RUDPSendMessage(conn *reliableUDP.ReliableUDP, addr string, msg Message) er
 	if err != nil {
 		return err
 	}
-	err = conn.Send(raddr, data, 0)
+	err = conn.Send(raddr, data, timeout)
 	if err != nil {
 		return err
 	}

@@ -48,7 +48,7 @@ func (t *TraversalTool) GetMyNatType() (NATTypeINfo, error) {
 		Type:          TestNatType,
 		IdentityToken: t.identityToken,
 	}
-	err = RUDPSendMessage(rudpConn, t.ServerAddr, msg)
+	err = RUDPSendMessage(rudpConn, t.ServerAddr, msg, t.testNATTimeout)
 	if err != nil {
 		return NATTypeINfo{}, fmt.Errorf("connect to server error %w", err)
 	}
@@ -123,8 +123,9 @@ func (t *TraversalTool) traversal() (TraversalInfo, error) {
 	if msg.Type != ACK {
 		return TraversalInfo{}, fmt.Errorf("receive wrong message type %d", msg.Type)
 	}
-	fmt.Println("receive ack")
+	fmt.Println("received ack")
 	//接收穿透信息holePunchingNegotiationMsg
+	log.Println("now receive punching info...")
 	msg, err = TCPReceiveMessage(tcpConn.(*net.TCPConn))
 	if err != nil {
 		return TraversalInfo{}, fmt.Errorf("receive message error %w", err)
@@ -238,7 +239,7 @@ func (t *TraversalTool) traversalUDP(tcpConn *net.TCPConn, punchingInfo holePunc
 		}
 		rudpConn := reliableUDP.NewReliableUDP(udpConn)
 		defer rudpConn.Close()
-		err = RUDPSendMessage(rudpConn, newServerAddr, Message{Type: Empty})
+		err = RUDPSendMessage(rudpConn, newServerAddr, Message{Type: Empty}, t.UDPTimeout)
 		if err != nil {
 			fmt.Println("send empty message error", err)
 			return
@@ -248,8 +249,12 @@ func (t *TraversalTool) traversalUDP(tcpConn *net.TCPConn, punchingInfo holePunc
 			fmt.Println("receive message error", err)
 			return
 		}
+		if msg.Type == ErrorResponse {
+			log.Println("remote peer error", msg.ErrorInfo)
+			return
+		}
 		if msg.Type != StartPunching {
-			fmt.Println("receive message type error", msg.Type)
+			fmt.Println("receive message type error", msg.Type, string(msg.Data))
 			return
 		}
 		addrChan <- string(msg.Data)
@@ -348,7 +353,7 @@ func (t *TraversalTool) activeBothNoSymmetric_UDP(laddr string, raddr string, rN
 	rudpConn := reliableUDP.NewReliableUDP(udpConn)
 	defer rudpConn.Close()
 	mag := Message{Type: ConnectionAck}
-	err = RUDPSendMessage(rudpConn, raddr, mag)
+	err = RUDPSendMessage(rudpConn, raddr, mag, t.UDPTimeout)
 	if err != nil {
 		return TraversalInfo{}, fmt.Errorf("send message error %w", err)
 	}
@@ -605,7 +610,7 @@ func (t *TraversalTool) symmetricToPortRestrict_UDP(laddr string, raddr string, 
 	defer rudpConn.Close()
 	rudpConn.SetGlobalReceive()
 	for i := 0; i < 3; i++ {
-		err := RUDPSendMessage(rudpConn, raddr, Message{Type: ConnectionAck})
+		err := RUDPSendMessage(rudpConn, raddr, Message{Type: ConnectionAck}, t.UDPTimeout)
 		if err != nil {
 			fmt.Println("send message error", err)
 			continue
@@ -969,7 +974,7 @@ func (t *TraversalTool) handleServerPortChangeTest(rudpConn *reliableUDP.Reliabl
 		Type:          ServerPortChangeTestResponse,
 		IdentityToken: t.identityToken,
 	}
-	err := RUDPSendMessage(rudpConn, t.ServerAddr, msg)
+	err := RUDPSendMessage(rudpConn, t.ServerAddr, msg, t.UDPTimeout)
 	if err != nil {
 		return fmt.Errorf("serverPortChangeTestResponse error %w", err)
 	}
@@ -984,7 +989,7 @@ func (t *TraversalTool) handlePortNegotiation(rudpConn *reliableUDP.ReliableUDP,
 		Type:          PortNegotiationResponse,
 		IdentityToken: t.identityToken,
 	}
-	err := RUDPSendMessage(rudpConn, tempAddr, msg)
+	err := RUDPSendMessage(rudpConn, tempAddr, msg, t.UDPTimeout)
 	if err != nil {
 		log.Println("port negotiation response error", err)
 		return fmt.Errorf("send message error %w", err)

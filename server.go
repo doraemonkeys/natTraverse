@@ -21,6 +21,9 @@ func (t *TraversalServer) Run() {
 	if t.testNATTimeout == 0 {
 		t.testNATTimeout = 5 * time.Second
 	}
+	if t.recvTimeout == 0 {
+		t.recvTimeout = 5 * time.Second
+	}
 	t.targetMap = make(map[string]chan Message)                //udp分发消息用
 	t.tonkenMap = make(map[string]chan holePunchingConnection) //tcp找到两个想建立连接的节点
 	TCPMsgCh := make(chan Message, 10)                         //TCP To UDP
@@ -208,7 +211,7 @@ func (t *TraversalServer) handleConnection(tcpConn *net.TCPConn, msg Message) er
 	}
 
 	if holeType == "UDP" {
-		err := handleUDPHolePunching(tcpConn, tcpConn2, natInfo, hole.NAT)
+		err := t.handleUDPHolePunching(tcpConn, tcpConn2, natInfo, hole.NAT)
 		if err != nil {
 			log.Println("handleUDPHolePunching error", err)
 			return err
@@ -226,7 +229,7 @@ func (t *TraversalServer) handleConnection(tcpConn *net.TCPConn, msg Message) er
 	return nil
 }
 
-func handleUDPHolePunching(tcpConn1, tcpConn2 *net.TCPConn, natInfo1, natInfo2 NATTypeINfo) error {
+func (t *TraversalServer) handleUDPHolePunching(tcpConn1, tcpConn2 *net.TCPConn, natInfo1, natInfo2 NATTypeINfo) error {
 	//创建两个随机端口的UDP连接，用可靠UDP协议包装
 	tempUdpConn1, err := UDPRandListen()
 	if err != nil {
@@ -250,7 +253,7 @@ func handleUDPHolePunching(tcpConn1, tcpConn2 *net.TCPConn, natInfo1, natInfo2 N
 	portCh1 := make(chan string, 1)
 	portCh2 := make(chan string, 1)
 	go func() {
-		_, addr, err := RUDPReceiveAllMessage(tempRudpConn1, 0)
+		_, addr, err := RUDPReceiveAllMessage(tempRudpConn1, t.recvTimeout)
 		if err != nil {
 			log.Println("receive message error", err)
 			return
@@ -259,7 +262,7 @@ func handleUDPHolePunching(tcpConn1, tcpConn2 *net.TCPConn, natInfo1, natInfo2 N
 		tempRudpConn1.Close()
 	}()
 	go func() {
-		_, addr, err := RUDPReceiveAllMessage(tempRudpConn2, 0)
+		_, addr, err := RUDPReceiveAllMessage(tempRudpConn2, t.recvTimeout)
 		if err != nil {
 			log.Println("receive message error", err)
 			return
@@ -347,6 +350,7 @@ func handleUDPHolePunching(tcpConn1, tcpConn2 *net.TCPConn, natInfo1, natInfo2 N
 			return err
 		}
 	}
+	log.Println("send port negotiation message success")
 	//等待两个节点的端口信息
 	var newRaddr1, newRaddr2 string
 	for {
@@ -356,8 +360,15 @@ func handleUDPHolePunching(tcpConn1, tcpConn2 *net.TCPConn, natInfo1, natInfo2 N
 		case newRaddr2 = <-portCh2:
 			log.Println("receive port2", newRaddr2)
 		case <-time.After(5 * time.Second): //时间间隔太长两个peer节点的端口就不具有时效性了
-			log.Println("receive port timeout")
-			return errors.New("receive port timeout")
+			err := errors.New("receive port timeout")
+			log.Println(err)
+			errMsg := Message{
+				Type:      ErrorResponse,
+				ErrorInfo: err.Error(),
+			}
+			TCPSendMessage(tcpConn1, errMsg)
+			TCPSendMessage(tcpConn2, errMsg)
+			return err
 		}
 		if newRaddr1 != "" && newRaddr2 != "" {
 			break
@@ -633,7 +644,7 @@ func (t *TraversalServer) handleTestNatType(rudpConn *reliableUDP.ReliableUDP, r
 	}()
 	var msg Message
 	msg.Type = ACK
-	err := RUDPSendMessage(rudpConn, raddr, msg)
+	err := RUDPSendMessage(rudpConn, raddr, msg, t.testNATTimeout)
 	if err != nil {
 		log.Println("send message error", err)
 		return
@@ -653,7 +664,7 @@ func (t *TraversalServer) handleTestNatType(rudpConn *reliableUDP.ReliableUDP, r
 	msg.Type = PortNegotiation
 	msg.Data = []byte(fmt.Sprint(randPort))
 	//fmt.Println("send port negotiation,data:", string(msg.Data))
-	err = RUDPSendMessage(rudpConn, raddr, msg)
+	err = RUDPSendMessage(rudpConn, raddr, msg, t.testNATTimeout)
 	if err != nil {
 		log.Println("send message error", err)
 		return
@@ -772,7 +783,7 @@ func (t *TraversalServer) handleTestNatType(rudpConn *reliableUDP.ReliableUDP, r
 		Data:          data,
 	}
 	fmt.Println("send end result", string(data))
-	err = RUDPSendMessage(rudpConn, raddr, finnalMsg)
+	err = RUDPSendMessage(rudpConn, raddr, finnalMsg, t.testNATTimeout)
 	if err != nil {
 		log.Println("send message error", err)
 		return
